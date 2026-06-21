@@ -3,12 +3,27 @@
 from __future__ import annotations
 
 import re
+import base64
+import hashlib
+import html
+import json
+import os
+import secrets
+import time
+from urllib.parse import urlencode
+from hmac import compare_digest
+from argparse import ArgumentParser
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 try:
     from fastmcp import FastMCP
+    from starlette.middleware import Middleware
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 except ModuleNotFoundError:
     class FastMCP:  # type: ignore[no-redef]
         """Small import-time shim so storage verification can run before setup."""
@@ -19,10 +34,18 @@ except ModuleNotFoundError:
         def tool(self, function: Any) -> Any:
             return function
 
-        def run(self) -> None:
+        def run(self, *args: Any, **kwargs: Any) -> None:
             raise RuntimeError(
                 "FastMCP is not installed. Run: python -m pip install -r requirements.txt"
             )
+
+    Middleware = None  # type: ignore[assignment]
+    BaseHTTPMiddleware = object  # type: ignore[assignment,misc]
+    Request = Any  # type: ignore[assignment]
+    Response = Any  # type: ignore[assignment]
+    HTMLResponse = None  # type: ignore[assignment]
+    JSONResponse = None  # type: ignore[assignment]
+    RedirectResponse = None  # type: ignore[assignment]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -80,6 +103,514 @@ TIMESTAMPED_MARKDOWN_PATTERN = re.compile(
 )
 
 mcp = FastMCP("Local Language Tutor Memory")
+
+
+@dataclass(frozen=True)
+class ServerConfig:
+    """Runtime transport settings for the MCP server."""
+
+    transport: str = "stdio"
+    host: str = "127.0.0.1"
+    port: int = 8000
+    path: str = "/mcp"
+    log_level: str = "info"
+    allow_writes: bool = True
+    require_auth: bool = False
+    auth_token_env: str = "LINGUAGPT_AUTH_TOKEN"
+    oauth_enabled: bool = False
+    oauth_password_env: str = "LINGUAGPT_OAUTH_PASSWORD"
+    audit_enabled: bool = True
+    audit_log: Path = TUTOR_DATA_ROOT / "audit-log.jsonl"
+
+
+@dataclass(frozen=True)
+class RuntimeSecurity:
+    """Mutable runtime security policy used by MCP tool wrappers."""
+
+    allow_writes: bool = True
+    audit_enabled: bool = True
+    audit_log: Path = TUTOR_DATA_ROOT / "audit-log.jsonl"
+
+
+CURRENT_SECURITY = RuntimeSecurity()
+OAUTH_AUTH_CODES: dict[str, dict[str, Any]] = {}
+OAUTH_ACCESS_TOKENS: dict[str, dict[str, Any]] = {}
+OAUTH_CODE_TTL_SECONDS = 300
+OAUTH_TOKEN_TTL_SECONDS = 86_400
+
+
+class BearerAuthMiddleware(BaseHTTPMiddleware):  # type: ignore[misc,valid-type]
+    """Require a bearer token for MCP requests and optionally serve OAuth."""
+
+    def __init__(
+        self,
+        app: Any,
+        token: str | None = None,
+        oauth_password: str | None = None,
+    ) -> None:
+        super().__init__(app)
+        self._expected_header = f"Bearer {token}" if token else None
+        self._oauth_password = oauth_password
+
+    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Response:
+        oauth_response = await self._handle_oauth_request(request)
+        if oauth_response is not None:
+            return oauth_response
+
+        authorization = request.headers.get("authorization", "")
+        if not self._is_authorized(authorization):
+            return JSONResponse(  # type: ignore[misc]
+                {"error": "Unauthorized"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return await call_next(request)
+
+    def _is_authorized(self, authorization: str) -> bool:
+        if self._expected_header and compare_digest(authorization, self._expected_header):
+            return True
+        if not authorization.startswith("Bearer "):
+            return False
+        token = authorization.removeprefix("Bearer ").strip()
+        token_record = OAUTH_ACCESS_TOKENS.get(token)
+        if not token_record:
+            return False
+        if token_record["expires_at"] < time.time():
+            OAUTH_ACCESS_TOKENS.pop(token, None)
+            return False
+        return True
+
+    async def _handle_oauth_request(self, request: Request) -> Response | None:
+        path = request.url.path.rstrip("/") or "/"
+        if path == "/.well-known/oauth-authorization-server":
+            return JSONResponse(_oauth_authorization_metadata(request))  # type: ignore[misc]
+        if path == "/.well-known/oauth-protected-resource":
+            return JSONResponse(_oauth_protected_resource_metadata(request))  # type: ignore[misc]
+        if path == "/oauth/authorize" and request.method == "GET":
+            return _oauth_authorize_form(request)
+        if path == "/oauth/authorize" and request.method == "POST":
+            form = await request.form()
+            return _oauth_authorize_submit(request, dict(form), self._oauth_password)
+        if path == "/oauth/token" and request.method == "POST":
+            form = await request.form()
+            return _oauth_token_response(dict(form))
+        return None
+
+
+def _oauth_base_url(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def _oauth_authorization_metadata(request: Request) -> dict[str, Any]:
+    base_url = _oauth_base_url(request)
+    return {
+        "issuer": base_url,
+        "authorization_endpoint": f"{base_url}/oauth/authorize",
+        "token_endpoint": f"{base_url}/oauth/token",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code"],
+        "code_challenge_methods_supported": ["S256", "plain"],
+        "token_endpoint_auth_methods_supported": ["none", "client_secret_post"],
+    }
+
+
+def _oauth_protected_resource_metadata(request: Request) -> dict[str, Any]:
+    base_url = _oauth_base_url(request)
+    return {
+        "resource": f"{base_url}/mcp",
+        "authorization_servers": [base_url],
+        "bearer_methods_supported": ["header"],
+    }
+
+
+def _oauth_authorize_form(request: Request) -> Response:
+    query = request.query_params
+    values = {
+        "response_type": query.get("response_type", ""),
+        "client_id": query.get("client_id", ""),
+        "redirect_uri": query.get("redirect_uri", ""),
+        "state": query.get("state", ""),
+        "code_challenge": query.get("code_challenge", ""),
+        "code_challenge_method": query.get("code_challenge_method", "plain"),
+    }
+    error = _validate_authorize_values(values)
+    if error:
+        return JSONResponse({"error": "invalid_request", "error_description": error}, status_code=400)  # type: ignore[misc]
+
+    hidden_inputs = "\n".join(
+        f'<input type="hidden" name="{html.escape(key)}" value="{html.escape(value)}">'
+        for key, value in values.items()
+    )
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Authorize LinguaGPT</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; }}
+    label, input, button {{ display: block; width: 100%; box-sizing: border-box; }}
+    input {{ margin: .5rem 0 1rem; padding: .65rem; }}
+    button {{ padding: .75rem; }}
+    code {{ background: #f2f2f2; padding: .1rem .25rem; }}
+  </style>
+</head>
+<body>
+  <h1>Authorize LinguaGPT</h1>
+  <p>Approve access for client <code>{html.escape(values["client_id"])}</code>.</p>
+  <p>This grants access to the local tutor memory MCP tools exposed by this server.</p>
+  <form method="post" action="/oauth/authorize">
+    {hidden_inputs}
+    <label for="password">OAuth approval password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Authorize</button>
+  </form>
+</body>
+</html>"""
+    return HTMLResponse(body)  # type: ignore[misc]
+
+
+def _oauth_authorize_submit(
+    request: Request, form: dict[str, Any], oauth_password: str | None
+) -> Response:
+    if not oauth_password:
+        return JSONResponse({"error": "server_error"}, status_code=500)  # type: ignore[misc]
+    submitted_password = str(form.get("password", ""))
+    if not compare_digest(submitted_password, oauth_password):
+        return JSONResponse({"error": "access_denied"}, status_code=403)  # type: ignore[misc]
+
+    values = {
+        "response_type": str(form.get("response_type", "")),
+        "client_id": str(form.get("client_id", "")),
+        "redirect_uri": str(form.get("redirect_uri", "")),
+        "state": str(form.get("state", "")),
+        "code_challenge": str(form.get("code_challenge", "")),
+        "code_challenge_method": str(form.get("code_challenge_method", "plain")),
+    }
+    error = _validate_authorize_values(values)
+    if error:
+        return JSONResponse({"error": "invalid_request", "error_description": error}, status_code=400)  # type: ignore[misc]
+
+    code = secrets.token_urlsafe(32)
+    OAUTH_AUTH_CODES[code] = {
+        "client_id": values["client_id"],
+        "redirect_uri": values["redirect_uri"],
+        "code_challenge": values["code_challenge"],
+        "code_challenge_method": values["code_challenge_method"],
+        "expires_at": time.time() + OAUTH_CODE_TTL_SECONDS,
+    }
+    redirect_params = {"code": code}
+    if values["state"]:
+        redirect_params["state"] = values["state"]
+    separator = "&" if "?" in values["redirect_uri"] else "?"
+    return RedirectResponse(  # type: ignore[misc]
+        values["redirect_uri"] + separator + urlencode(redirect_params),
+        status_code=302,
+    )
+
+
+def _validate_authorize_values(values: dict[str, str]) -> str | None:
+    if values["response_type"] != "code":
+        return "response_type must be code."
+    if not values["client_id"]:
+        return "client_id is required."
+    if not values["redirect_uri"]:
+        return "redirect_uri is required."
+    if not _is_allowed_redirect_uri(values["redirect_uri"]):
+        return "redirect_uri must be https or localhost http."
+    method = values["code_challenge_method"] or "plain"
+    if method not in {"plain", "S256"}:
+        return "Unsupported code_challenge_method."
+    return None
+
+
+def _is_allowed_redirect_uri(redirect_uri: str) -> bool:
+    return redirect_uri.startswith("https://") or redirect_uri.startswith(
+        "http://127.0.0.1"
+    ) or redirect_uri.startswith("http://localhost")
+
+
+def _oauth_token_response(form: dict[str, Any]) -> Response:
+    grant_type = str(form.get("grant_type", ""))
+    code = str(form.get("code", ""))
+    redirect_uri = str(form.get("redirect_uri", ""))
+    client_id = str(form.get("client_id", ""))
+    code_verifier = str(form.get("code_verifier", ""))
+
+    if grant_type != "authorization_code":
+        return _oauth_error("unsupported_grant_type", "Only authorization_code is supported.")
+    code_record = OAUTH_AUTH_CODES.pop(code, None)
+    if not code_record:
+        return _oauth_error("invalid_grant", "Authorization code is invalid.")
+    if code_record["expires_at"] < time.time():
+        return _oauth_error("invalid_grant", "Authorization code has expired.")
+    if redirect_uri != code_record["redirect_uri"]:
+        return _oauth_error("invalid_grant", "redirect_uri does not match.")
+    if client_id and client_id != code_record["client_id"]:
+        return _oauth_error("invalid_grant", "client_id does not match.")
+    if not _verify_pkce(
+        code_record["code_challenge"],
+        code_record["code_challenge_method"],
+        code_verifier,
+    ):
+        return _oauth_error("invalid_grant", "PKCE verification failed.")
+
+    access_token = secrets.token_urlsafe(48)
+    OAUTH_ACCESS_TOKENS[access_token] = {
+        "client_id": code_record["client_id"],
+        "expires_at": time.time() + OAUTH_TOKEN_TTL_SECONDS,
+    }
+    return JSONResponse(  # type: ignore[misc]
+        {
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": OAUTH_TOKEN_TTL_SECONDS,
+            "scope": "linguagpt",
+        }
+    )
+
+
+def _verify_pkce(challenge: str, method: str, verifier: str) -> bool:
+    if not challenge:
+        return True
+    if not verifier:
+        return False
+    if method == "plain":
+        return compare_digest(challenge, verifier)
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    computed = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return compare_digest(challenge, computed)
+
+
+def _oauth_error(error: str, description: str) -> Response:
+    return JSONResponse(  # type: ignore[misc]
+        {"error": error, "error_description": description},
+        status_code=400,
+    )
+
+
+def parse_server_config(argv: list[str] | None = None) -> ServerConfig:
+    """Parse command-line options while keeping stdio as the default."""
+    parser = ArgumentParser(
+        description="Run the local language tutor memory MCP server."
+    )
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="Run an HTTP MCP endpoint instead of the default stdio transport.",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind in HTTP mode. Use 0.0.0.0 for Docker access.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind in HTTP mode.",
+    )
+    parser.add_argument(
+        "--path",
+        default="/mcp",
+        help="HTTP MCP endpoint path.",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="info",
+        choices=("critical", "error", "warning", "info", "debug", "trace"),
+        help="HTTP server log level.",
+    )
+    parser.add_argument(
+        "--allow-writes",
+        action="store_true",
+        help=(
+            "Allow write-capable MCP tools in HTTP mode. Stdio mode allows "
+            "writes by default."
+        ),
+    )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="Block all write-capable MCP tools for this server process.",
+    )
+    parser.add_argument(
+        "--require-auth",
+        action="store_true",
+        help="Require HTTP requests to include a bearer token.",
+    )
+    parser.add_argument(
+        "--auth-token-env",
+        default="LINGUAGPT_AUTH_TOKEN",
+        help="Environment variable containing the HTTP bearer token.",
+    )
+    parser.add_argument(
+        "--oauth",
+        action="store_true",
+        help="Enable a minimal single-user OAuth flow for ChatGPT connectors.",
+    )
+    parser.add_argument(
+        "--oauth-password-env",
+        default="LINGUAGPT_OAUTH_PASSWORD",
+        help="Environment variable containing the OAuth approval password.",
+    )
+    parser.add_argument(
+        "--audit-log",
+        default=str(TUTOR_DATA_ROOT / "audit-log.jsonl"),
+        help="Path to a JSONL audit log for MCP tool calls.",
+    )
+    parser.add_argument(
+        "--no-audit",
+        action="store_true",
+        help="Disable local JSONL audit logging.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.port < 1 or args.port > 65535:
+        parser.error("--port must be between 1 and 65535.")
+    if not args.path.startswith("/"):
+        parser.error("--path must start with '/'.")
+
+    if not args.auth_token_env:
+        parser.error("--auth-token-env must not be empty.")
+    if not args.oauth_password_env:
+        parser.error("--oauth-password-env must not be empty.")
+
+    allow_writes = not args.read_only and (not args.http or args.allow_writes)
+
+    return ServerConfig(
+        transport="http" if args.http else "stdio",
+        host=args.host,
+        port=args.port,
+        path=args.path,
+        log_level=args.log_level,
+        allow_writes=allow_writes,
+        require_auth=args.require_auth,
+        auth_token_env=args.auth_token_env,
+        oauth_enabled=args.oauth,
+        oauth_password_env=args.oauth_password_env,
+        audit_enabled=not args.no_audit,
+        audit_log=Path(args.audit_log),
+    )
+
+
+def configure_runtime_security(config: ServerConfig) -> None:
+    """Apply runtime security policy used by MCP tool wrappers."""
+    global CURRENT_SECURITY
+    CURRENT_SECURITY = RuntimeSecurity(
+        allow_writes=config.allow_writes,
+        audit_enabled=config.audit_enabled,
+        audit_log=config.audit_log,
+    )
+
+
+def _http_middleware(config: ServerConfig) -> list[Any]:
+    if config.transport != "http":
+        return []
+    token = os.environ.get(config.auth_token_env)
+    oauth_password = os.environ.get(config.oauth_password_env)
+    if config.require_auth and not token:
+        raise RuntimeError(
+            f"HTTP authentication is required, but {config.auth_token_env} is not set."
+        )
+    if config.oauth_enabled and not oauth_password:
+        raise RuntimeError(
+            f"OAuth is enabled, but {config.oauth_password_env} is not set."
+        )
+    if not token and not config.oauth_enabled:
+        return []
+    if Middleware is None:
+        raise RuntimeError(
+            "HTTP authentication requires FastMCP and Starlette to be installed."
+        )
+    return [
+        Middleware(
+            BearerAuthMiddleware,
+            token=token,
+            oauth_password=oauth_password if config.oauth_enabled else None,
+        )
+    ]
+
+
+def run_server(config: ServerConfig) -> None:
+    """Start FastMCP with the requested transport."""
+    configure_runtime_security(config)
+    if config.transport == "stdio":
+        mcp.run()
+        return
+
+    mcp.run(
+        transport=config.transport,
+        host=config.host,
+        port=config.port,
+        path=config.path,
+        log_level=config.log_level,
+        middleware=_http_middleware(config),
+    )
+
+
+def _audit_tool_call(
+    tool_name: str,
+    status: str,
+    *,
+    language: str | None = None,
+    filename: str | None = None,
+    detail: str | None = None,
+) -> None:
+    if not CURRENT_SECURITY.audit_enabled:
+        return
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool": tool_name,
+        "status": status,
+    }
+    if language is not None:
+        record["language"] = language
+    if filename is not None:
+        record["filename"] = filename
+    if detail is not None:
+        record["detail"] = detail
+
+    CURRENT_SECURITY.audit_log.parent.mkdir(parents=True, exist_ok=True)
+    with CURRENT_SECURITY.audit_log.open("a", encoding="utf-8") as log_file:
+        log_file.write(json.dumps(record, ensure_ascii=True) + "\n")
+
+
+def _run_tool(
+    tool_name: str,
+    operation: Callable[[], Any],
+    *,
+    writes: bool = False,
+    language: str | None = None,
+    filename: str | None = None,
+) -> Any:
+    if writes and not CURRENT_SECURITY.allow_writes:
+        _audit_tool_call(
+            tool_name,
+            "blocked_write",
+            language=language,
+            filename=filename,
+            detail="Write-capable tools are disabled for this server process.",
+        )
+        raise PermissionError(
+            "Write-capable tools are disabled for this server process. "
+            "Start with --allow-writes to permit updates."
+        )
+
+    try:
+        result = operation()
+    except Exception as exc:
+        _audit_tool_call(
+            tool_name,
+            "error",
+            language=language,
+            filename=filename,
+            detail=f"{type(exc).__name__}: {exc}",
+        )
+        raise
+
+    _audit_tool_call(tool_name, "success", language=language, filename=filename)
+    return result
 
 
 def _normalize_language(language: str) -> str:
@@ -474,15 +1005,24 @@ def initialize_language_profile(
     Existing profile and lesson-plan files are preserved unless
     overwrite_existing is explicitly true. Other existing files are never reset.
     """
-    return initialize_profile(
-        language, profile_markdown, lesson_plan_markdown, overwrite_existing
+    return _run_tool(
+        "initialize_language_profile",
+        lambda: initialize_profile(
+            language, profile_markdown, lesson_plan_markdown, overwrite_existing
+        ),
+        writes=True,
+        language=language,
     )
 
 
 @mcp.tool
 def read_language_context(language: str) -> dict[str, str]:
     """Read the bounded active tutor context, excluding archives and drafts."""
-    return read_context(language)
+    return _run_tool(
+        "read_language_context",
+        lambda: read_context(language),
+        language=language,
+    )
 
 
 @mcp.tool
@@ -490,13 +1030,24 @@ def write_language_file(
     language: str, filename: str, content: str
 ) -> dict[str, Any]:
     """Replace one allowed Markdown file in an existing language profile."""
-    return write_file(language, filename, content)
+    return _run_tool(
+        "write_language_file",
+        lambda: write_file(language, filename, content),
+        writes=True,
+        language=language,
+        filename=filename,
+    )
 
 
 @mcp.tool
 def append_session_log(language: str, session_markdown: str) -> dict[str, Any]:
     """Save a final session, update latest summary, and clear the checkpoint."""
-    return append_session(language, session_markdown)
+    return _run_tool(
+        "append_session_log",
+        lambda: append_session(language, session_markdown),
+        writes=True,
+        language=language,
+    )
 
 
 @mcp.tool
@@ -504,13 +1055,22 @@ def save_session_checkpoint(
     language: str, checkpoint_markdown: str
 ) -> dict[str, Any]:
     """Overwrite the concise active-session checkpoint during a long lesson."""
-    return save_checkpoint(language, checkpoint_markdown)
+    return _run_tool(
+        "save_session_checkpoint",
+        lambda: save_checkpoint(language, checkpoint_markdown),
+        writes=True,
+        language=language,
+    )
 
 
 @mcp.tool
 def get_language_context_status(language: str) -> dict[str, Any]:
     """Report context sizes and cumulative files recommended for compaction."""
-    return context_status(language)
+    return _run_tool(
+        "get_language_context_status",
+        lambda: context_status(language),
+        language=language,
+    )
 
 
 @mcp.tool
@@ -518,13 +1078,24 @@ def compact_language_file(
     language: str, filename: str, compacted_markdown: str
 ) -> dict[str, Any]:
     """Archive one cumulative context file and replace it with a concise version."""
-    return compact_file(language, filename, compacted_markdown)
+    return _run_tool(
+        "compact_language_file",
+        lambda: compact_file(language, filename, compacted_markdown),
+        writes=True,
+        language=language,
+        filename=filename,
+    )
 
 
 @mcp.tool
 def list_language_file_archives(language: str, filename: str) -> list[str]:
     """List available archive timestamps for one cumulative context file."""
-    return list_archives(language, filename)
+    return _run_tool(
+        "list_language_file_archives",
+        lambda: list_archives(language, filename),
+        language=language,
+        filename=filename,
+    )
 
 
 @mcp.tool
@@ -532,14 +1103,19 @@ def read_language_file_archive(
     language: str, filename: str, archive_filename: str
 ) -> dict[str, str]:
     """Read one archive selected from list_language_file_archives."""
-    return read_archive(language, filename, archive_filename)
+    return _run_tool(
+        "read_language_file_archive",
+        lambda: read_archive(language, filename, archive_filename),
+        language=language,
+        filename=filename,
+    )
 
 
 @mcp.tool
 def list_languages() -> list[str]:
     """List initialized language profiles."""
-    return available_languages()
+    return _run_tool("list_languages", available_languages)
 
 
 if __name__ == "__main__":
-    mcp.run()
+    run_server(parse_server_config())

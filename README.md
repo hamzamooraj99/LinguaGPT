@@ -51,6 +51,90 @@ python server.py
 The default transport is FastMCP's stdio transport. Configure your MCP client to
 launch `python` with the absolute path to `server.py` as its argument.
 
+For clients that connect to an MCP endpoint over HTTP, run:
+
+```powershell
+python server.py --http
+```
+
+This exposes the MCP endpoint at:
+
+```text
+http://127.0.0.1:8000/mcp
+```
+
+For Docker or another machine on the local network, bind to all interfaces:
+
+```powershell
+python server.py --http --host 0.0.0.0 --port 8000
+```
+
+The HTTP path can also be changed:
+
+```powershell
+python server.py --http --path /lingua
+```
+
+HTTP mode is read-only by default. To allow ChatGPT or another HTTP client to
+update learner files, opt in explicitly:
+
+```powershell
+python server.py --http --allow-writes
+```
+
+For a public tunnel, require a bearer token:
+
+```powershell
+$env:LINGUAGPT_AUTH_TOKEN = "replace-with-a-long-random-secret"
+python server.py --http --allow-writes --require-auth
+```
+
+Requests must then include:
+
+```text
+Authorization: Bearer replace-with-a-long-random-secret
+```
+
+Tool calls are logged without Markdown content to:
+
+```text
+tutor_data/audit-log.jsonl
+```
+
+Use `--read-only` to block write-capable tools in any transport and `--no-audit`
+to disable audit logging.
+
+For ChatGPT custom connectors that require OAuth, enable the built-in single-user
+OAuth flow:
+
+```powershell
+$env:LINGUAGPT_OAUTH_PASSWORD = "replace-with-a-long-random-password"
+python server.py --http --oauth --allow-writes
+```
+
+In ChatGPT, use the tunnel URL with these paths:
+
+```text
+Server URL: https://<your-tunnel-host>/mcp
+Auth URL:   https://<your-tunnel-host>/oauth/authorize
+Token URL:  https://<your-tunnel-host>/oauth/token
+```
+
+Use any stable client ID such as `linguagpt-chatgpt`. Leave client secret blank
+if ChatGPT allows it. During the OAuth approval step, enter the value from
+`LINGUAGPT_OAUTH_PASSWORD`.
+
+The server also exposes OAuth discovery metadata at:
+
+```text
+/.well-known/oauth-authorization-server
+/.well-known/oauth-protected-resource
+```
+
+The OAuth flow is intentionally single-user and local-first. It does not require
+an external identity provider. The approval password is only used to approve
+the connector on your machine.
+
 ## Tools
 
 - `initialize_language_profile`: creates a complete profile. Existing files are
@@ -101,5 +185,5 @@ python -m unittest discover -s tests -v
 ```
 
 The included `tutor_data/german/` directory is example data and can be edited or
-removed. There is no database, network service, authentication layer, web UI, or
-automatic backup. Files are local to the machine running the server.
+removed. There is no database, web UI, or automatic backup. Files are local to
+the machine running the server.

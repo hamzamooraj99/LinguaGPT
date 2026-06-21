@@ -1,22 +1,34 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 
 from server import (
     ALLOWED_FILES,
+    ServerConfig,
+    OAUTH_AUTH_CODES,
+    OAUTH_ACCESS_TOKENS,
     append_session,
     available_languages,
     compact_file,
+    configure_runtime_security,
     context_status,
     initialize_profile,
     list_archives,
+    parse_server_config,
     read_context,
     read_archive,
     save_checkpoint,
     write_file,
+    _oauth_token_response,
+    _run_tool,
 )
 
 
@@ -30,6 +42,9 @@ class StorageVerificationTests(unittest.TestCase):
         self.template_root = PROJECT_ROOT / "templates"
 
     def tearDown(self) -> None:
+        configure_runtime_security(ServerConfig())
+        OAUTH_AUTH_CODES.clear()
+        OAUTH_ACCESS_TOKENS.clear()
         self.temporary_directory.cleanup()
 
     def initialize(self) -> dict[str, object]:
@@ -228,6 +243,130 @@ class StorageVerificationTests(unittest.TestCase):
                 "../outside.md",
                 data_root=self.data_root,
             )
+
+    def test_server_config_defaults_to_stdio(self) -> None:
+        config = parse_server_config([])
+
+        self.assertEqual(config.transport, "stdio")
+        self.assertEqual(config.host, "127.0.0.1")
+        self.assertEqual(config.port, 8000)
+        self.assertEqual(config.path, "/mcp")
+        self.assertTrue(config.allow_writes)
+        self.assertTrue(config.audit_enabled)
+
+    def test_server_config_supports_http_mode(self) -> None:
+        config = parse_server_config(
+            [
+                "--http",
+                "--allow-writes",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8123",
+                "--path",
+                "/lingua",
+                "--log-level",
+                "debug",
+            ]
+        )
+
+        self.assertEqual(config.transport, "http")
+        self.assertEqual(config.host, "0.0.0.0")
+        self.assertEqual(config.port, 8123)
+        self.assertEqual(config.path, "/lingua")
+        self.assertEqual(config.log_level, "debug")
+        self.assertTrue(config.allow_writes)
+
+    def test_server_config_http_mode_is_read_only_by_default(self) -> None:
+        config = parse_server_config(["--http"])
+
+        self.assertEqual(config.transport, "http")
+        self.assertFalse(config.allow_writes)
+
+    def test_server_config_supports_oauth_mode(self) -> None:
+        config = parse_server_config(["--http", "--oauth"])
+
+        self.assertTrue(config.oauth_enabled)
+        self.assertEqual(config.oauth_password_env, "LINGUAGPT_OAUTH_PASSWORD")
+
+    def test_server_config_rejects_invalid_http_options(self) -> None:
+        with redirect_stderr(StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_server_config(["--http", "--port", "70000"])
+
+        with redirect_stderr(StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_server_config(["--http", "--path", "mcp"])
+
+    def test_runtime_security_blocks_write_tools_and_audits(self) -> None:
+        audit_log = self.data_root / "audit-log.jsonl"
+        configure_runtime_security(
+            ServerConfig(allow_writes=False, audit_log=audit_log)
+        )
+
+        with self.assertRaises(PermissionError):
+            _run_tool(
+                "save_session_checkpoint",
+                lambda: self.fail("Blocked write should not execute."),
+                writes=True,
+                language="german",
+            )
+
+        audit = audit_log.read_text("utf-8")
+        self.assertIn('"tool": "save_session_checkpoint"', audit)
+        self.assertIn('"status": "blocked_write"', audit)
+        self.assertNotIn("# Checkpoint", audit)
+
+    def test_oauth_token_exchange_validates_pkce_and_issues_bearer(self) -> None:
+        verifier = "test-verifier"
+        challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(verifier.encode("ascii")).digest()
+        ).decode("ascii").rstrip("=")
+        OAUTH_AUTH_CODES["test-code"] = {
+            "client_id": "chatgpt",
+            "redirect_uri": "https://chatgpt.com/oauth/callback",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "expires_at": 9_999_999_999,
+        }
+
+        response = _oauth_token_response(
+            {
+                "grant_type": "authorization_code",
+                "code": "test-code",
+                "redirect_uri": "https://chatgpt.com/oauth/callback",
+                "client_id": "chatgpt",
+                "code_verifier": verifier,
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(body["token_type"], "Bearer")
+        self.assertIn(body["access_token"], OAUTH_ACCESS_TOKENS)
+
+    def test_oauth_token_exchange_rejects_bad_pkce(self) -> None:
+        OAUTH_AUTH_CODES["test-code"] = {
+            "client_id": "chatgpt",
+            "redirect_uri": "https://chatgpt.com/oauth/callback",
+            "code_challenge": "expected",
+            "code_challenge_method": "plain",
+            "expires_at": 9_999_999_999,
+        }
+
+        response = _oauth_token_response(
+            {
+                "grant_type": "authorization_code",
+                "code": "test-code",
+                "redirect_uri": "https://chatgpt.com/oauth/callback",
+                "client_id": "chatgpt",
+                "code_verifier": "wrong",
+            }
+        )
+
+        self.assertEqual(response.status_code, 400)
+        body = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(body["error"], "invalid_grant")
 
 
 if __name__ == "__main__":
