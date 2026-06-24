@@ -1,23 +1,67 @@
-# Local Language Tutor Memory MCP
+<p align="center">
+  <img src="logo/logo.png" alt="LinguaGPT logo" width="180">
+</p>
 
-A minimal, local-first FastMCP server that stores language tutoring memory in
-human-editable Markdown files. It is deliberately only a storage and retrieval
-layer: the connected language model performs all teaching, correction, learner
-evaluation, and curriculum decisions.
+# LinguaGPT
 
-## Project layout
+**Local-first language tutoring memory for AI tutors.**
+
+LinguaGPT is a small MCP server that gives an AI language tutor durable,
+human-readable memory without turning the server into a tutor. It stores learner
+profiles, lesson plans, progress, vocabulary, mistakes, scenarios, homework,
+session checkpoints, and summaries as Markdown files on your machine.
+
+The model teaches. LinguaGPT remembers.
+
+## Why LinguaGPT
+
+Most language-learning chats lose continuity. LinguaGPT solves that by giving an
+MCP-compatible client a clean local memory layer:
+
+- **Local by default**: learner data lives under `tutor_data/`.
+- **Human-readable**: Markdown files are the source of truth.
+- **Model-led teaching**: no lesson generation or proficiency judgment in Python.
+- **Safe file access**: tools validate language IDs and whitelist writable files.
+- **Context-aware retention**: active context stays bounded while full history is
+  archived on disk.
+- **Minimal stack**: FastMCP, Python, Markdown, and the filesystem.
+
+## What It Is
+
+LinguaGPT is a filesystem-backed MCP memory server for language tutoring.
+
+It is responsible for:
+
+- creating language learner profiles
+- reading bounded teaching context
+- writing approved learner files
+- saving active-session checkpoints
+- appending permanent session logs
+- archiving compacted long-running files
+- reporting context size and compaction recommendations
+
+It is not responsible for:
+
+- generating lessons
+- grading the learner
+- deciding curriculum strategy
+- sending emails or WhatsApp messages
+- running a web app or database
+
+Those responsibilities stay with the connected language model and the user.
+
+## Project Layout
 
 ```text
 server.py                 FastMCP server and validated storage operations
 templates/                Default Markdown files used during initialization
-tutor_data/<language>/    Local learner data (one directory per language)
-TUTOR_INSTRUCTIONS.md     Instructions for the language-model tutor
+tutor_data/<language>/    Local learner data, one directory per language
+TUTOR_INSTRUCTIONS.md     Tutor-facing model instructions
 tests/                    Standard-library verification tests
+requirements.txt          Python dependencies
 ```
 
-Each language directory contains the profile, plan, progress, vocabulary,
-mistakes, scenarios, latest summary, active-session checkpoint, latest homework,
-delivery drafts, permanent session logs, and lossless context archives.
+Each language gets its own Markdown workspace:
 
 ```text
 tutor_data/<language>/
@@ -37,72 +81,79 @@ tutor_data/<language>/
   archives/
 ```
 
-## Setup and run
+## Requirements
 
-Python 3.10 or newer is recommended.
+- Python 3.10 or newer
+- An MCP-compatible client
+- Local filesystem access to this repository
+
+## Quick Start
+
+Create a virtual environment and install dependencies:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+```
+
+Run the server with the default stdio transport:
+
+```powershell
 python server.py
 ```
 
-The default transport is FastMCP's stdio transport. Configure your MCP client to
-launch `python` with the absolute path to `server.py` as its argument.
+Configure your MCP client to launch `python` with the absolute path to
+`server.py` as its argument.
 
-For clients that connect to an MCP endpoint over HTTP, run:
+## HTTP Mode
+
+For clients that connect to an MCP endpoint over HTTP:
 
 ```powershell
 python server.py --http
 ```
 
-This exposes the MCP endpoint at:
+The default endpoint is:
 
 ```text
 http://127.0.0.1:8000/mcp
 ```
 
-For Docker or another machine on the local network, bind to all interfaces:
-
-```powershell
-python server.py --http --host 0.0.0.0 --port 8000
-```
-
-The HTTP path can also be changed:
-
-```powershell
-python server.py --http --path /lingua
-```
-
-HTTP mode is read-only by default. To allow ChatGPT or another HTTP client to
-update learner files, opt in explicitly:
+HTTP mode is read-only by default. To let the client update learner files, opt in
+explicitly:
 
 ```powershell
 python server.py --http --allow-writes
 ```
 
-For a public tunnel, require a bearer token:
+To bind to another interface, for example from Docker or another local-network
+machine:
+
+```powershell
+python server.py --http --host 0.0.0.0 --port 8000
+```
+
+To use a different endpoint path:
+
+```powershell
+python server.py --http --path /lingua
+```
+
+## Authentication
+
+For public tunnels or non-local access, require a bearer token:
 
 ```powershell
 $env:LINGUAGPT_AUTH_TOKEN = "replace-with-a-long-random-secret"
 python server.py --http --allow-writes --require-auth
 ```
 
-Requests must then include:
+Clients must then send:
 
 ```text
 Authorization: Bearer replace-with-a-long-random-secret
 ```
-
-Tool calls are logged without Markdown content to:
-
-```text
-tutor_data/audit-log.jsonl
-```
-
-Use `--read-only` to block write-capable tools in any transport and `--no-audit`
-to disable audit logging.
 
 For ChatGPT custom connectors that require OAuth, enable the built-in single-user
 OAuth flow:
@@ -112,7 +163,7 @@ $env:LINGUAGPT_OAUTH_PASSWORD = "replace-with-a-long-random-password"
 python server.py --http --oauth --allow-writes
 ```
 
-In ChatGPT, use the tunnel URL with these paths:
+Use your public tunnel host with these paths:
 
 ```text
 Server URL: https://<your-tunnel-host>/mcp
@@ -120,70 +171,95 @@ Auth URL:   https://<your-tunnel-host>/oauth/authorize
 Token URL:  https://<your-tunnel-host>/oauth/token
 ```
 
-Use any stable client ID such as `linguagpt-chatgpt`. Leave client secret blank
-if ChatGPT allows it. During the OAuth approval step, enter the value from
+Use any stable client ID, such as `linguagpt-chatgpt`. Leave the client secret
+blank if your client allows it. During approval, enter the value from
 `LINGUAGPT_OAUTH_PASSWORD`.
 
-The server also exposes OAuth discovery metadata at:
+OAuth discovery metadata is exposed at:
 
 ```text
 /.well-known/oauth-authorization-server
 /.well-known/oauth-protected-resource
 ```
 
-The OAuth flow is intentionally single-user and local-first. It does not require
-an external identity provider. The approval password is only used to approve
-the connector on your machine.
+The OAuth flow is intentionally single-user and local-first. It does not depend
+on an external identity provider.
 
-## Tools
+## MCP Tools
 
-- `initialize_language_profile`: creates a complete profile. Existing files are
-  preserved; pass `overwrite_existing=true` to replace only an existing profile
-  and lesson plan with the supplied content.
-- `read_language_context`: returns only the bounded active teaching context; it
-  never loads permanent session logs, delivery drafts, or archives.
-- `write_language_file`: replaces one explicitly whitelisted Markdown file,
-  including homework and delivery drafts.
-- `append_session_log`: creates a unique UTC-timestamped session file and updates
-  `latest-summary.md`, then resets `active-session.md`.
-- `save_session_checkpoint`: replaces the concise active-session state during a
-  long lesson so the AI can recover after client-side context compaction.
-- `get_language_context_status`: reports character counts and recommends
-  compaction for cumulative files at 12,000 characters.
-- `compact_language_file`: archives a complete cumulative file and replaces it
-  with concise Markdown supplied by the AI.
-- `list_language_file_archives` and `read_language_file_archive`: retrieve one
-  validated historical context version on demand without loading all archives.
-- `list_languages`: returns valid language directories alphabetically.
+| Tool | Purpose |
+| --- | --- |
+| `initialize_language_profile` | Create a complete language profile from templates and supplied learner details. |
+| `read_language_context` | Return bounded active teaching context without loading permanent logs or archives. |
+| `write_language_file` | Replace one whitelisted Markdown file, including homework and delivery drafts. |
+| `append_session_log` | Create a timestamped session log, update `latest-summary.md`, and reset `active-session.md`. |
+| `save_session_checkpoint` | Replace the concise active-session state during a long lesson. |
+| `get_language_context_status` | Report character counts and recommend compaction when files grow large. |
+| `compact_language_file` | Archive a complete cumulative file and replace it with a concise model-supplied version. |
+| `list_language_file_archives` | List validated historical archive versions for one file. |
+| `read_language_file_archive` | Read one validated archive file on demand. |
+| `list_languages` | Return available language directories alphabetically. |
 
-Language identifiers are normalized to lowercase and may contain letters, digits,
-and hyphens only. Filenames are selected from a fixed whitelist; callers cannot
-provide arbitrary paths. All text is read and written as UTF-8 beneath
-`tutor_data/`.
+Language identifiers are normalized to lowercase and may contain only letters,
+digits, and hyphens. Filenames come from a fixed whitelist. Callers cannot write
+arbitrary paths.
 
-## Context and retention model
+## Data Model
 
-`active-session.md`, `latest-summary.md`, `latest-homework.md`, and both delivery
-drafts are bounded because they are replaced. Historical `sessions/` and
-`archives/` grow linearly on disk but are not loaded into model context.
+LinguaGPT keeps active context small and recoverable:
 
-Profile, plan, progress, vocabulary, mistakes, and scenarios can accumulate over
-time. The status tool flags any one of these at 12,000 characters and also warns
-when total active context reaches 36,000 characters. These are character-based
-heuristics, not exact model-token measurements. The AI then calls the compaction
-tool with a concise replacement; the full original is retained in
-`archives/<file-stem>/<UTC timestamp>.md`. Python never summarizes or decides what
-learning content to retain.
+- `active-session.md`, `latest-summary.md`, `latest-homework.md`, and delivery
+  drafts are bounded because they are replaced.
+- `sessions/` stores permanent timestamped lesson logs.
+- `archives/` stores full pre-compaction versions of cumulative files.
+- Profile, lesson plan, progress, vocabulary, mistakes, and scenarios can grow
+  over time, so the status tool flags large files for model-led compaction.
 
-Email and WhatsApp files are drafts only. This project performs no network calls
-and does not send messages.
+Compaction is deliberately model-led. Python archives the original and writes the
+replacement supplied by the AI; it does not decide what learning content matters.
 
-## Verify
+## Security Posture
+
+LinguaGPT is designed to be boring and local:
+
+- all learner data stays under `tutor_data/`
+- all text is read and written as UTF-8
+- path traversal is rejected
+- write targets are whitelisted
+- HTTP writes require `--allow-writes`
+- bearer-token auth is available for exposed HTTP endpoints
+- tool calls are audited without logging Markdown content
+
+Audit logs are written to:
+
+```text
+tutor_data/audit-log.jsonl
+```
+
+Use `--read-only` to block write-capable tools in any transport and `--no-audit`
+to disable local JSONL audit logging.
+
+## Verification
+
+Run the test suite:
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
+The tests verify initialization, safe writes, invalid path rejection, UTF-8
+preservation, session logging, compaction archives, runtime security flags, and
+OAuth token handling.
+
+## Design Principles
+
+LinguaGPT favors:
+
+- simple files over databases
+- explicit tools over broad "god tools"
+- local control over hosted state
+- Markdown over opaque storage
+- model intelligence over server-side teaching logic
+
 The included `tutor_data/german/` directory is example data and can be edited or
-removed. There is no database, web UI, or automatic backup. Files are local to
-the machine running the server.
+removed. There is no database, frontend, external sender, or automatic backup.
