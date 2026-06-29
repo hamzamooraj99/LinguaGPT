@@ -1,0 +1,84 @@
+<Window x:Class="LinguaGPT.Launcher.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LinguaGPT MCP"
+        Width="520"
+        Height="610"
+        MinWidth="520"
+        MinHeight="610"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/linguagpt.ico"
+        Background="#F5F6F7"
+        FontFamily="Segoe UI">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="150" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Orange}">
+            <Grid Margin="28,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="108" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Image Source="Assets/logo.png" Width="104" Height="104" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="22,0,0,0">
+                    <TextBlock Text="LinguaGPT MCP" FontSize="25" FontWeight="SemiBold" Foreground="White" />
+                    <TextBlock Text="Local tutor memory server" FontSize="14" Foreground="#FFF1E9" Margin="0,5,0,0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="28,24,28,22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="Server status" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}" />
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,7,0,0">
+                <Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="#8A9099" VerticalAlignment="Center" />
+                <StackPanel Margin="10,0,0,0">
+                    <TextBlock x:Name="StatusTitle" Text="Stopped" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Ink}" />
+                    <TextBlock x:Name="StatusDetail" Text="The MCP server is offline." FontSize="13" Foreground="{StaticResource Muted}" Margin="0,3,0,0" />
+                </StackPanel>
+            </StackPanel>
+
+            <Grid Grid.Row="2" Margin="0,22,0,24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="StartButton" Content="Start server" Click="StartButton_Click" Background="{StaticResource Orange}" Foreground="White" BorderThickness="0" />
+                <Button x:Name="StopButton" Grid.Column="2" Content="Stop server" Click="StopButton_Click" Background="White" Foreground="{StaticResource Ink}" BorderBrush="#D5D9DE" />
+            </Grid>
+
+            <Grid Grid.Row="3" Margin="0,0,0,9">
+                <TextBlock Text="Recent output" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Ink}" VerticalAlignment="Center" />
+                <Button Content="Open log" Click="OpenLog_Click" HorizontalAlignment="Right" Padding="12,6" FontSize="12" Background="Transparent" BorderThickness="0" Foreground="#E84F00" />
+            </Grid>
+
+            <Border Grid.Row="4" Background="#25282D" CornerRadius="6" Padding="12">
+                <TextBox x:Name="LogText"
+                         Text="Server output will appear here."
+                         IsReadOnly="True"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         Foreground="#D8DEE9"
+                         FontFamily="Consolas"
+                         FontSize="11"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" />
+            </Border>
+
+            <TextBlock Grid.Row="5" Text="Keep this window open while the server is running." HorizontalAlignment="Center" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,13,0,0" />
+        </Grid>
+    </Grid>
+</Window>

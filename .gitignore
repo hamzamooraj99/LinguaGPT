@@ -5,3 +5,9 @@ __pycache__/
 /logo/*
 !/logo/
 !/logo/logo.png
+!/logo/linguagpt.ico
+tutor_data/.launcher-state.json
+tutor_data/launcher-server.log
+launcher/bin/
+launcher/obj/
+launcher/publish/

@@ -106,6 +106,36 @@ python server.py
 Configure your MCP client to launch `python` with the absolute path to
 `server.py` as its argument.
 
+## Windows Desktop Launcher
+
+LinguaGPT includes a small WPF desktop controller for starting and stopping the
+OAuth-enabled HTTP server without PowerShell, WSL, Docker, or a terminal window.
+
+Run this once:
+
+```bat
+setup_launcher.cmd
+```
+
+The setup creates `.venv/`, installs the dependencies, publishes the launcher,
+and adds a branded
+`LinguaGPT MCP` shortcut to the current user's desktop. Open the shortcut to:
+
+- start the FastMCP server in OAuth HTTP mode
+- stop the running server and its child process
+- see the current process state
+- inspect recent server output
+
+The launcher runs this command without opening a terminal window:
+
+```powershell
+python server.py --http --oauth --allow-writes
+```
+
+Before opening the launcher, define `LINGUAGPT_OAUTH_PASSWORD` as a Windows user
+environment variable. The launcher inherits it without storing the password in
+the repository. Closing the launcher stops the server.
+
 ## HTTP Mode
 
 For clients that connect to an MCP endpoint over HTTP:
