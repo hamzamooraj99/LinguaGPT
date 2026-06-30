@@ -1,13 +1,44 @@
+# Internal project notes
+/AGENTS.md
+/language_tutor_mcp_build_plan.md
+
+# Python
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Local learner data and runtime state
+/tutor_data/*
+!/tutor_data/.gitkeep
+
+# .NET build output
+launcher/bin/
+launcher/obj/
+launcher/publish/
+
+# Keep only the public, runtime logo assets
 /logo/*
 !/logo/
 !/logo/logo.png
 !/logo/linguagpt.ico
-tutor_data/.launcher-state.json
-tutor_data/launcher-server.log
-launcher/bin/
-launcher/obj/
-launcher/publish/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.bak
+*~
+*.af~lock~

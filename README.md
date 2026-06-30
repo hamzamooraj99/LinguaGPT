@@ -281,6 +281,19 @@ The tests verify initialization, safe writes, invalid path rejection, UTF-8
 preservation, session logging, compaction archives, runtime security flags, and
 OAuth token handling.
 
+## Contributing and Support
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before
+submitting a change and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Use [SUPPORT.md](SUPPORT.md) for support guidance. Report vulnerabilities
+privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+LinguaGPT is free software licensed under the
+[GNU General Public License v3.0](LICENSE).
+
 ## Design Principles
 
 LinguaGPT favors:
