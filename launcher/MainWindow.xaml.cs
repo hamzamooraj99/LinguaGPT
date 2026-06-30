@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly string _statePath;
     private readonly string _logPath;
     private readonly DispatcherTimer _timer;
+    private readonly object _logLock = new();
     private Process? _server;
     private StreamWriter? _logWriter;
 
@@ -55,8 +56,7 @@ public partial class MainWindow : Window
         if (_server is { HasExited: true })
         {
             _server = null;
-            _logWriter?.Dispose();
-            _logWriter = null;
+            CloseLog();
             File.Delete(_statePath);
             SetStatus("Error", "The server stopped unexpectedly. Check the output below.", "#B42318", true, false);
         }
@@ -71,9 +71,18 @@ public partial class MainWindow : Window
 
         if (File.Exists(_logPath))
         {
-            var lines = File.ReadLines(_logPath).TakeLast(80);
-            LogText.Text = string.Join(Environment.NewLine, lines);
-            LogText.ScrollToEnd();
+            try
+            {
+                using var stream = new FileStream(_logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                var lines = reader.ReadToEnd().Split(Environment.NewLine).TakeLast(80);
+                LogText.Text = string.Join(Environment.NewLine, lines);
+                LogText.ScrollToEnd();
+            }
+            catch (IOException)
+            {
+                // A log refresh should never take down the launcher.
+            }
         }
     }
 
@@ -101,9 +110,12 @@ public partial class MainWindow : Window
         }
 
         SetStatus("Starting", "FastMCP is starting up...", "#FF5A00", false, false);
-        _logWriter = new StreamWriter(new FileStream(_logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
-        _logWriter.WriteLine();
-        _logWriter.WriteLine("--- Starting LinguaGPT MCP ---");
+        lock (_logLock)
+        {
+            _logWriter = new StreamWriter(new FileStream(_logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
+            _logWriter.WriteLine();
+            _logWriter.WriteLine("--- Starting LinguaGPT MCP ---");
+        }
 
         _server = new Process
         {
@@ -119,8 +131,8 @@ public partial class MainWindow : Window
             },
             EnableRaisingEvents = true,
         };
-        _server.OutputDataReceived += (_, args) => { if (args.Data is not null) _logWriter?.WriteLine(args.Data); };
-        _server.ErrorDataReceived += (_, args) => { if (args.Data is not null) _logWriter?.WriteLine(args.Data); };
+        _server.OutputDataReceived += (_, args) => AppendLog(args.Data);
+        _server.ErrorDataReceived += (_, args) => AppendLog(args.Data);
         _server.Start();
         _server.BeginOutputReadLine();
         _server.BeginErrorReadLine();
@@ -140,9 +152,8 @@ public partial class MainWindow : Window
         }
         catch { }
         _server = null;
-        _logWriter?.WriteLine("--- LinguaGPT MCP stopped ---");
-        _logWriter?.Dispose();
-        _logWriter = null;
+        AppendLog("--- LinguaGPT MCP stopped ---");
+        CloseLog();
         File.Delete(_statePath);
         RefreshState();
     }
@@ -151,6 +162,24 @@ public partial class MainWindow : Window
     {
         if (!File.Exists(_logPath)) File.WriteAllText(_logPath, string.Empty);
         Process.Start(new ProcessStartInfo(_logPath) { UseShellExecute = true });
+    }
+
+    private void AppendLog(string? line)
+    {
+        if (line is null) return;
+        lock (_logLock)
+        {
+            _logWriter?.WriteLine(line);
+        }
+    }
+
+    private void CloseLog()
+    {
+        lock (_logLock)
+        {
+            _logWriter?.Dispose();
+            _logWriter = null;
+        }
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
