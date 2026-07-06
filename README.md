@@ -1,56 +1,104 @@
 <p align="center">
-  <img src="logo/logo.png" alt="LinguaGPT logo" width="180">
+  <img src="logo/logo.png" alt="LinguaGPT — the model teaches, LinguaGPT remembers" width="180">
 </p>
 
-# LinguaGPT
+<p align="center">
+  <img src="https://img.shields.io/badge/protocol-MCP-6D4AA8.svg" alt="MCP">
+  <img src="https://img.shields.io/badge/python-3.10%2B-3776AB.svg" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/tests-15%2F15-3E7D5A.svg" alt="15/15 tests">
+  <img src="https://img.shields.io/badge/data-100%25%20local-3E7D5A.svg" alt="100% local">
+  <img src="https://img.shields.io/badge/license-GPLv3-yellow.svg" alt="GPLv3 License">
+</p>
 
-**Local-first language tutoring memory for AI tutors.**
+<h3 align="center">Any model can teach a language. LinguaGPT makes sure it still knows your learner next week.</h3>
 
-LinguaGPT is a small MCP server that gives an AI language tutor durable,
-human-readable memory without turning the server into a tutor. It stores learner
-profiles, lesson plans, progress, vocabulary, mistakes, scenarios, homework,
-session checkpoints, and summaries as Markdown files on your machine.
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python server.py
+```
 
-The model teaches. LinguaGPT remembers.
+Then point any MCP-compatible client at `python server.py`. No account, no database, no cloud — learner memory is Markdown files under `tutor_data/` that you own and can read.
 
-## Why LinguaGPT
+> **The model teaches. LinguaGPT remembers.** It stores learner profiles, lesson plans, progress, vocabulary, mistakes, scenarios, homework, session checkpoints, and summaries as human-readable files on your machine — and does none of the tutoring itself.
 
-Most language-learning chats lose continuity. LinguaGPT solves that by giving an
-MCP-compatible client a clean local memory layer:
+---
 
-- **Local by default**: learner data lives under `tutor_data/`.
-- **Human-readable**: Markdown files are the source of truth.
-- **Model-led teaching**: no lesson generation or proficiency judgment in Python.
-- **Safe file access**: tools validate language IDs and whitelist writable files.
-- **Context-aware retention**: active context stays bounded while full history is
-  archived on disk.
-- **Minimal stack**: FastMCP, Python, Markdown, and the filesystem.
+## Wait — what *is* this?
 
-## What It Is
+Most language-learning chats lose continuity the moment you close the window. The model re-meets your learner every session: no memory of the last mistake, no running vocabulary, no plan for what comes next.
 
-LinguaGPT is a filesystem-backed MCP memory server for language tutoring.
+LinguaGPT is the memory layer that fixes that — a small, filesystem-backed MCP server that gives an AI tutor durable, human-readable state **without turning the server into a tutor.**
 
-It is responsible for:
+| LinguaGPT **is** | LinguaGPT is **not** |
+|---|---|
+| a local memory layer — every learner is a folder of Markdown you own | a cloud service, account, or subscription |
+| filesystem-backed and human-readable — the files *are* the source of truth | an opaque database or vector store |
+| a set of narrow, validated tools the model calls to read and write context | a "god tool" that does everything through one endpoint |
+| deliberately model-led — Python never grades or generates lessons | a tutor, curriculum engine, or proficiency judge |
 
-- creating language learner profiles
-- reading bounded teaching context
-- writing approved learner files
-- saving active-session checkpoints
-- appending permanent session logs
-- archiving compacted long-running files
-- reporting context size and compaction recommendations
+**Concretely, installing it gives you:** an MCP server exposing ten validated tools, one Markdown workspace per language under `tutor_data/`, an optional Windows desktop launcher, and an audit trail — with teaching, grading, and curriculum strategy left entirely to the connected model and the user.
 
-It is not responsible for:
+---
 
-- generating lessons
-- grading the learner
-- deciding curriculum strategy
-- sending emails or WhatsApp messages
-- running a web app or database
+## The loop
 
-Those responsibilities stay with the connected language model and the user.
+```
+  MODEL ──→  initialize_language_profile
+              │
+              ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  READ BOUNDED CONTEXT   read_language_context                 │
+  │  active session + summary + profile — never the full          │
+  │  archives. The model teaches from a small, current view.      │
+  └──────────────────────────────────────────────────────────────┘
+              │
+              ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  TEACH  (the connected model — LinguaGPT stays out of it)     │
+  │  lessons, corrections, homework, curriculum strategy:         │
+  │  all model intelligence, none of it server-side logic.        │
+  └──────────────────────────────────────────────────────────────┘
+              │   approved writes only, whitelisted files
+              ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  PERSIST   write_language_file · save_session_checkpoint      │
+  │  profile, progress, vocab, mistakes, homework, delivery       │
+  │  drafts — each write validated, path-traversal rejected.      │
+  └──────────────────────────────────────────────────────────────┘
+              │
+              ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  ARCHIVE & COMPACT   append_session_log · compact_language_   │
+  │  file · get_language_context_status                           │
+  │  permanent timestamped logs on disk; active context stays     │
+  │  bounded; the status tool flags files for model-led compaction.│
+  └──────────────────────────────────────────────────────────────┘
+              │
+              ▼
+  next session:  read_language_context returns a small, current view —
+                 full history archived, ready but out of the way.
+```
 
-## Project Layout
+---
+
+## What it is responsible for
+
+| It **does** | It **does not** |
+|---|---|
+| create learner profiles from templates | generate lessons |
+| return bounded teaching context | grade the learner |
+| write approved, whitelisted files | decide curriculum strategy |
+| save active-session checkpoints | send emails or WhatsApp messages |
+| append permanent session logs | run a web app or database |
+| archive and report on compaction | judge proficiency |
+
+Those right-hand responsibilities stay with the connected language model and the user. That separation is the whole design: Python moves bytes safely; the model does the thinking.
+
+---
+
+## Project layout
 
 ```text
 server.py                 FastMCP server and validated storage operations
@@ -81,13 +129,15 @@ tutor_data/<language>/
   archives/
 ```
 
+---
+
 ## Requirements
 
 - Python 3.10 or newer
 - An MCP-compatible client
 - Local filesystem access to this repository
 
-## Quick Start
+## Quick start
 
 Create a virtual environment and install dependencies:
 
@@ -103,13 +153,13 @@ Run the server with the default stdio transport:
 python server.py
 ```
 
-Configure your MCP client to launch `python` with the absolute path to
-`server.py` as its argument.
+Configure your MCP client to launch `python` with the absolute path to `server.py` as its argument.
 
-## Windows Desktop Launcher
+---
 
-LinguaGPT includes a small WPF desktop controller for starting and stopping the
-OAuth-enabled HTTP server without PowerShell, WSL, Docker, or a terminal window.
+## Windows desktop launcher
+
+LinguaGPT includes a small WPF desktop controller for starting and stopping the OAuth-enabled HTTP server without PowerShell, WSL, Docker, or a terminal window.
 
 Run this once:
 
@@ -117,9 +167,7 @@ Run this once:
 setup_launcher.cmd
 ```
 
-The setup creates `.venv/`, installs the dependencies, publishes the launcher,
-and adds a branded
-`LinguaGPT MCP` shortcut to the current user's desktop. Open the shortcut to:
+The setup creates `.venv/`, installs the dependencies, publishes the launcher, and adds a branded `LinguaGPT MCP` shortcut to the current user's desktop. Open the shortcut to:
 
 - start the FastMCP server in OAuth HTTP mode
 - stop the running server and its child process
@@ -132,11 +180,11 @@ The launcher runs this command without opening a terminal window:
 python server.py --http --oauth --allow-writes
 ```
 
-Before opening the launcher, define `LINGUAGPT_OAUTH_PASSWORD` as a Windows user
-environment variable. The launcher inherits it without storing the password in
-the repository. Closing the launcher stops the server.
+Before opening the launcher, define `LINGUAGPT_OAUTH_PASSWORD` as a Windows user environment variable. The launcher inherits it without storing the password in the repository. Closing the launcher stops the server.
 
-## HTTP Mode
+---
+
+## HTTP mode
 
 For clients that connect to an MCP endpoint over HTTP:
 
@@ -150,15 +198,13 @@ The default endpoint is:
 http://127.0.0.1:8000/mcp
 ```
 
-HTTP mode is read-only by default. To let the client update learner files, opt in
-explicitly:
+HTTP mode is **read-only by default.** To let the client update learner files, opt in explicitly:
 
 ```powershell
 python server.py --http --allow-writes
 ```
 
-To bind to another interface, for example from Docker or another local-network
-machine:
+To bind to another interface, for example from Docker or another local-network machine:
 
 ```powershell
 python server.py --http --host 0.0.0.0 --port 8000
@@ -170,7 +216,8 @@ To use a different endpoint path:
 python server.py --http --path /lingua
 ```
 
-## Authentication
+<details>
+<summary><b>Authentication</b> — bearer tokens and single-user OAuth for exposed endpoints</summary>
 
 For public tunnels or non-local access, require a bearer token:
 
@@ -185,8 +232,7 @@ Clients must then send:
 Authorization: Bearer replace-with-a-long-random-secret
 ```
 
-For ChatGPT custom connectors that require OAuth, enable the built-in single-user
-OAuth flow:
+For ChatGPT custom connectors that require OAuth, enable the built-in single-user OAuth flow:
 
 ```powershell
 $env:LINGUAGPT_OAUTH_PASSWORD = "replace-with-a-long-random-password"
@@ -201,9 +247,7 @@ Auth URL:   https://<your-tunnel-host>/oauth/authorize
 Token URL:  https://<your-tunnel-host>/oauth/token
 ```
 
-Use any stable client ID, such as `linguagpt-chatgpt`. Leave the client secret
-blank if your client allows it. During approval, enter the value from
-`LINGUAGPT_OAUTH_PASSWORD`.
+Use any stable client ID, such as `linguagpt-chatgpt`. Leave the client secret blank if your client allows it. During approval, enter the value from `LINGUAGPT_OAUTH_PASSWORD`.
 
 OAuth discovery metadata is exposed at:
 
@@ -212,10 +256,13 @@ OAuth discovery metadata is exposed at:
 /.well-known/oauth-protected-resource
 ```
 
-The OAuth flow is intentionally single-user and local-first. It does not depend
-on an external identity provider.
+The OAuth flow is intentionally single-user and local-first. It does not depend on an external identity provider.
 
-## MCP Tools
+</details>
+
+---
+
+## MCP tools
 
 | Tool | Purpose |
 | --- | --- |
@@ -230,25 +277,24 @@ on an external identity provider.
 | `read_language_file_archive` | Read one validated archive file on demand. |
 | `list_languages` | Return available language directories alphabetically. |
 
-Language identifiers are normalized to lowercase and may contain only letters,
-digits, and hyphens. Filenames come from a fixed whitelist. Callers cannot write
-arbitrary paths.
+Language identifiers are normalized to lowercase and may contain only letters, digits, and hyphens. Filenames come from a fixed whitelist. **Callers cannot write arbitrary paths.**
 
-## Data Model
+---
+
+## Data model
 
 LinguaGPT keeps active context small and recoverable:
 
-- `active-session.md`, `latest-summary.md`, `latest-homework.md`, and delivery
-  drafts are bounded because they are replaced.
-- `sessions/` stores permanent timestamped lesson logs.
-- `archives/` stores full pre-compaction versions of cumulative files.
-- Profile, lesson plan, progress, vocabulary, mistakes, and scenarios can grow
-  over time, so the status tool flags large files for model-led compaction.
+- `active-session.md`, `latest-summary.md`, `latest-homework.md`, and delivery drafts are bounded because they are **replaced**, not appended.
+- `sessions/` stores **permanent** timestamped lesson logs.
+- `archives/` stores **full pre-compaction** versions of cumulative files.
+- Profile, lesson plan, progress, vocabulary, mistakes, and scenarios can grow over time, so the status tool flags large files for model-led compaction.
 
-Compaction is deliberately model-led. Python archives the original and writes the
-replacement supplied by the AI; it does not decide what learning content matters.
+Compaction is deliberately model-led: Python archives the original and writes the replacement supplied by the AI. It does not decide what learning content matters.
 
-## Security Posture
+---
+
+## Security posture
 
 LinguaGPT is designed to be boring and local:
 
@@ -258,7 +304,7 @@ LinguaGPT is designed to be boring and local:
 - write targets are whitelisted
 - HTTP writes require `--allow-writes`
 - bearer-token auth is available for exposed HTTP endpoints
-- tool calls are audited without logging Markdown content
+- tool calls are audited **without logging Markdown content**
 
 Audit logs are written to:
 
@@ -266,8 +312,9 @@ Audit logs are written to:
 tutor_data/audit-log.jsonl
 ```
 
-Use `--read-only` to block write-capable tools in any transport and `--no-audit`
-to disable local JSONL audit logging.
+Use `--read-only` to block write-capable tools in any transport, and `--no-audit` to disable local JSONL audit logging.
+
+---
 
 ## Verification
 
@@ -277,24 +324,43 @@ Run the test suite:
 python -m unittest discover -s tests -v
 ```
 
-The tests verify initialization, safe writes, invalid path rejection, UTF-8
-preservation, session logging, compaction archives, runtime security flags, and
-OAuth token handling.
+The tests verify initialization, safe writes, invalid path rejection, UTF-8 preservation, session logging, compaction archives, runtime security flags, and OAuth token handling.
 
-## Contributing and Support
+---
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before
-submitting a change and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+## FAQ
 
-Use [SUPPORT.md](SUPPORT.md) for support guidance. Report vulnerabilities
-privately as described in [SECURITY.md](SECURITY.md).
+**How is this different from just chatting with an AI tutor?**
+A chat has no memory of your learner between sessions. LinguaGPT adds the state a chat can't hold: a durable profile, a running record of vocabulary and mistakes, permanent session logs, and a bounded context the model can re-read next time. The teaching is the easy part — continuity is what's missing.
+
+**Does it teach or grade the learner?**
+No. On purpose. Lesson generation, correction, curriculum strategy, and proficiency judgment all stay with the connected model. Python only reads and writes files safely. That boundary is enforced by the tool set, not by convention.
+
+**Where does my data live?**
+Under `tutor_data/`, one folder per language, as plain Markdown you can open, edit, diff, or delete. There is no database, no frontend, no external sender, and no automatic backup. Nothing leaves your machine unless you deliberately expose the HTTP endpoint.
+
+**Can I expose it over the network?**
+Yes — HTTP mode with `--allow-writes`, protected by a bearer token or the built-in single-user OAuth flow for clients like ChatGPT connectors. Writes are opt-in; read-only is the default.
+
+**Won't the files grow forever?**
+The status tool reports character counts and recommends compaction. When you agree, the model supplies a concise replacement and Python archives the full original under `archives/` — nothing is lost.
+
+---
+
+## Contributing and support
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Use [SUPPORT.md](SUPPORT.md) for support guidance. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-LinguaGPT is free software licensed under the
-[GNU General Public License v3.0](LICENSE).
+LinguaGPT is free software licensed under the [GNU General Public License v3.0](LICENSE).
 
-## Design Principles
+---
+
+<details>
+<summary><b>Design principles</b></summary>
 
 LinguaGPT favors:
 
@@ -304,5 +370,10 @@ LinguaGPT favors:
 - Markdown over opaque storage
 - model intelligence over server-side teaching logic
 
-The included `tutor_data/german/` directory is example data and can be edited or
-removed. There is no database, frontend, external sender, or automatic backup.
+The included `tutor_data/german/` directory is example data and can be edited or removed. There is no database, frontend, external sender, or automatic backup.
+
+</details>
+
+---
+
+<sub>*A <b>lingua franca</b> is the shared tongue that lets strangers understand each other. LinguaGPT is the shared memory that lets a model and a learner pick up exactly where they left off.* · Built on FastMCP · GPLv3</sub>
