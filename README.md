@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo/logo.png" alt="LinguaGPT — the model teaches, LinguaGPT remembers" width="180">
+  <img src="logo/logo_lrg.png" alt="LinguaGPT — the model teaches, LinguaGPT remembers" width="180">
 </p>
 
 <p align="center">
