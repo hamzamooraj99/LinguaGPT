@@ -16,7 +16,7 @@ Set shortcut = shell.CreateShortcut(shortcutPath)
 shortcut.TargetPath = shell.ExpandEnvironmentStrings("%SystemRoot%\System32\wscript.exe")
 shortcut.Arguments = Chr(34) & projectRoot & "\scripts\launch_gui.vbs" & Chr(34)
 shortcut.WorkingDirectory = projectRoot
-shortcut.IconLocation = projectRoot & "\logo\linguagpt.ico,0"
+shortcut.IconLocation = projectRoot & "\logo\logo_lrg.ico,0"
 shortcut.Description = "Start and stop the LinguaGPT MCP server"
 shortcut.WindowStyle = 1
 shortcut.Save

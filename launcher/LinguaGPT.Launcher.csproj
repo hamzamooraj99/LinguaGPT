@@ -8,7 +8,7 @@
     <AssemblyName>LinguaGPT.Launcher</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <Resource Include="..\logo\logo.png" Link="Assets\logo.png" />
-    <Resource Include="..\logo\linguagpt.ico" Link="Assets\linguagpt.ico" />
+    <Resource Include="..\logo\logo_lrg.png" Link="Assets\logo_lrg.png" />
+    <Resource Include="..\logo\logo_lrg.ico" Link="Assets\logo_lrg.ico" />
   </ItemGroup>
 </Project>

@@ -8,7 +8,7 @@
         MinHeight="610"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
-        Icon="Assets/linguagpt.ico"
+        Icon="Assets/logo_lrg.ico"
         Background="#F5F6F7"
         FontFamily="Segoe UI">
     <Grid>
@@ -23,7 +23,7 @@
                     <ColumnDefinition Width="108" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Image Source="Assets/logo.png" Width="104" Height="104" />
+                <Image Source="Assets/logo_lrg.png" Width="104" Height="104" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="22,0,0,0">
                     <TextBlock Text="LinguaGPT MCP" FontSize="25" FontWeight="SemiBold" Foreground="White" />
                     <TextBlock Text="Local tutor memory server" FontSize="14" Foreground="#FFF1E9" Margin="0,5,0,0" />
