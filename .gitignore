@@ -26,6 +26,7 @@ launcher/publish/
 !/logo/linguagpt.ico
 !/logo/logo_lrg.png
 !/logo/logo_lrg.ico
+!/logo/lingua_hero.png
 
 # Secrets and local configuration
 .env
