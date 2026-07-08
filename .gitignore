@@ -24,6 +24,8 @@ launcher/publish/
 !/logo/
 !/logo/logo.png
 !/logo/linguagpt.ico
+!/logo/logo_lrg.png
+!/logo/logo_lrg.ico
 
 # Secrets and local configuration
 .env
