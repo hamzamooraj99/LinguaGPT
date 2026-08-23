@@ -3,7 +3,7 @@
 ## Our commitment
 
 We are committed to providing a welcoming, safe, and respectful environment
-for everyone participating in the LinguaGPT community, regardless of identity,
+for everyone participating in the LinguaMCP community, regardless of identity,
 background, experience, or ability.
 
 ## Expected behavior

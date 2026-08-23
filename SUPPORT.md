@@ -7,7 +7,7 @@ the default branch.
 Include:
 
 - operating system and Python version
-- LinguaGPT version or commit
+- LinguaMCP version or commit
 - MCP client and transport mode
 - minimal reproduction steps
 - expected and actual behavior

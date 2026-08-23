@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo/logo_lrg.png" alt="LinguaGPT — the model teaches, LinguaGPT remembers" width="180">
+  <img src="logo/logo_lrg.png" alt="LinguaMCP — the model teaches, LinguaMCP remembers" width="180">
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/license-GPLv3-yellow.svg" alt="GPLv3 License">
 </p>
 
-<h3 align="center">Any model can teach a language. LinguaGPT makes sure it still knows your learner next week.</h3>
+<h3 align="center">Any model can teach a language. LinguaMCP makes sure it still knows your learner next week.</h3>
 
 ```powershell
 python -m venv .venv
@@ -21,7 +21,7 @@ python server.py
 
 Then point any MCP-compatible client at `python server.py`. No account, no database, no cloud — learner memory is Markdown files under `tutor_data/` that you own and can read.
 
-> **The model teaches. LinguaGPT remembers.** It stores learner profiles, lesson plans, progress, vocabulary, mistakes, scenarios, homework, session checkpoints, and summaries as human-readable files on your machine — and does none of the tutoring itself.
+> **The model teaches. LinguaMCP remembers.** It stores learner profiles, lesson plans, progress, vocabulary, mistakes, scenarios, homework, session checkpoints, and summaries as human-readable files on your machine — and does none of the tutoring itself.
 
 ---
 
@@ -29,9 +29,9 @@ Then point any MCP-compatible client at `python server.py`. No account, no datab
 
 Most language-learning chats lose continuity the moment you close the window. The model re-meets your learner every session: no memory of the last mistake, no running vocabulary, no plan for what comes next.
 
-LinguaGPT is the memory layer that fixes that — a small, filesystem-backed MCP server that gives an AI tutor durable, human-readable state **without turning the server into a tutor.**
+LinguaMCP is the memory layer that fixes that — a small, filesystem-backed MCP server that gives an AI tutor durable, human-readable state **without turning the server into a tutor.**
 
-| LinguaGPT **is** | LinguaGPT is **not** |
+| LinguaMCP **is** | LinguaMCP is **not** |
 |---|---|
 | a local memory layer — every learner is a folder of Markdown you own | a cloud service, account, or subscription |
 | filesystem-backed and human-readable — the files *are* the source of truth | an opaque database or vector store |
@@ -56,7 +56,7 @@ LinguaGPT is the memory layer that fixes that — a small, filesystem-backed MCP
               │
               ▼
   ┌──────────────────────────────────────────────────────────────┐
-  │  TEACH  (the connected model — LinguaGPT stays out of it)     │
+  │  TEACH  (the connected model — LinguaMCP stays out of it)     │
   │  lessons, corrections, homework, curriculum strategy:         │
   │  all model intelligence, none of it server-side logic.        │
   └──────────────────────────────────────────────────────────────┘
@@ -159,7 +159,7 @@ Configure your MCP client to launch `python` with the absolute path to `server.p
 
 ## Windows desktop launcher
 
-LinguaGPT includes a small WPF desktop controller for starting and stopping the OAuth-enabled HTTP server without PowerShell, WSL, Docker, or a terminal window.
+LinguaMCP includes a small WPF desktop controller for starting and stopping the OAuth-enabled HTTP server without PowerShell, WSL, Docker, or a terminal window.
 
 Run this once:
 
@@ -167,7 +167,7 @@ Run this once:
 setup_launcher.cmd
 ```
 
-The setup creates `.venv/`, installs the dependencies, publishes the launcher, and adds a branded `LinguaGPT MCP` shortcut to the current user's desktop. Open the shortcut to:
+The setup creates `.venv/`, installs the dependencies, publishes the launcher, and adds a branded `LinguaMCP MCP` shortcut to the current user's desktop. Open the shortcut to:
 
 - start the FastMCP server in OAuth HTTP mode
 - stop the running server and its child process
@@ -180,7 +180,7 @@ The launcher runs this command without opening a terminal window:
 python server.py --http --oauth --allow-writes
 ```
 
-Before opening the launcher, define `LINGUAGPT_OAUTH_PASSWORD` as a Windows user environment variable. The launcher inherits it without storing the password in the repository. Closing the launcher stops the server.
+Before opening the launcher, define `LINGUAMCP_OAUTH_PASSWORD` as a Windows user environment variable. The launcher inherits it without storing the password in the repository. Closing the launcher stops the server.
 
 ---
 
@@ -222,7 +222,7 @@ python server.py --http --path /lingua
 For public tunnels or non-local access, require a bearer token:
 
 ```powershell
-$env:LINGUAGPT_AUTH_TOKEN = "replace-with-a-long-random-secret"
+$env:LINGUAMCP_AUTH_TOKEN = "replace-with-a-long-random-secret"
 python server.py --http --allow-writes --require-auth
 ```
 
@@ -235,7 +235,7 @@ Authorization: Bearer replace-with-a-long-random-secret
 For ChatGPT custom connectors that require OAuth, enable the built-in single-user OAuth flow:
 
 ```powershell
-$env:LINGUAGPT_OAUTH_PASSWORD = "replace-with-a-long-random-password"
+$env:LINGUAMCP_OAUTH_PASSWORD = "replace-with-a-long-random-password"
 python server.py --http --oauth --allow-writes
 ```
 
@@ -247,7 +247,7 @@ Auth URL:   https://<your-tunnel-host>/oauth/authorize
 Token URL:  https://<your-tunnel-host>/oauth/token
 ```
 
-Use any stable client ID, such as `linguagpt-chatgpt`. Leave the client secret blank if your client allows it. During approval, enter the value from `LINGUAGPT_OAUTH_PASSWORD`.
+Use any stable client ID, such as `linguamcp-chatgpt`. Leave the client secret blank if your client allows it. During approval, enter the value from `LINGUAMCP_OAUTH_PASSWORD`.
 
 OAuth discovery metadata is exposed at:
 
@@ -283,7 +283,7 @@ Language identifiers are normalized to lowercase and may contain only letters, d
 
 ## Data model
 
-LinguaGPT keeps active context small and recoverable:
+LinguaMCP keeps active context small and recoverable:
 
 - `active-session.md`, `latest-summary.md`, `latest-homework.md`, and delivery drafts are bounded because they are **replaced**, not appended.
 - `sessions/` stores **permanent** timestamped lesson logs.
@@ -296,7 +296,7 @@ Compaction is deliberately model-led: Python archives the original and writes th
 
 ## Security posture
 
-LinguaGPT is designed to be boring and local:
+LinguaMCP is designed to be boring and local:
 
 - all learner data stays under `tutor_data/`
 - all text is read and written as UTF-8
@@ -331,7 +331,7 @@ The tests verify initialization, safe writes, invalid path rejection, UTF-8 pres
 ## FAQ
 
 **How is this different from just chatting with an AI tutor?**
-A chat has no memory of your learner between sessions. LinguaGPT adds the state a chat can't hold: a durable profile, a running record of vocabulary and mistakes, permanent session logs, and a bounded context the model can re-read next time. The teaching is the easy part — continuity is what's missing.
+A chat has no memory of your learner between sessions. LinguaMCP adds the state a chat can't hold: a durable profile, a running record of vocabulary and mistakes, permanent session logs, and a bounded context the model can re-read next time. The teaching is the easy part — continuity is what's missing.
 
 **Does it teach or grade the learner?**
 No. On purpose. Lesson generation, correction, curriculum strategy, and proficiency judgment all stay with the connected model. Python only reads and writes files safely. That boundary is enforced by the tool set, not by convention.
@@ -355,14 +355,14 @@ Use [SUPPORT.md](SUPPORT.md) for support guidance. Report vulnerabilities privat
 
 ## License
 
-LinguaGPT is free software licensed under the [GNU General Public License v3.0](LICENSE).
+LinguaMCP is free software licensed under the [GNU General Public License v3.0](LICENSE).
 
 ---
 
 <details>
 <summary><b>Design principles</b></summary>
 
-LinguaGPT favors:
+LinguaMCP favors:
 
 - simple files over databases
 - explicit tools over broad "god tools"
@@ -376,4 +376,4 @@ The included `tutor_data/german/` directory is example data and can be edited or
 
 ---
 
-<sub>*A <b>lingua franca</b> is the shared tongue that lets strangers understand each other. LinguaGPT is the shared memory that lets a model and a learner pick up exactly where they left off.* · Built on FastMCP · GPLv3</sub>
+<sub>*A <b>lingua franca</b> is the shared tongue that lets strangers understand each other. LinguaMCP is the shared memory that lets a model and a learner pick up exactly where they left off.* · Built on FastMCP · GPLv3</sub>

@@ -5,7 +5,7 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>LinguaGPT.Launcher</AssemblyName>
+    <AssemblyName>LinguaMCP.Launcher</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="..\logo\logo_lrg.png" Link="Assets\logo_lrg.png" />

@@ -116,9 +116,9 @@ class ServerConfig:
     log_level: str = "info"
     allow_writes: bool = True
     require_auth: bool = False
-    auth_token_env: str = "LINGUAGPT_AUTH_TOKEN"
+    auth_token_env: str = "LINGUAMCP_AUTH_TOKEN"
     oauth_enabled: bool = False
-    oauth_password_env: str = "LINGUAGPT_OAUTH_PASSWORD"
+    oauth_password_env: str = "LINGUAMCP_OAUTH_PASSWORD"
     audit_enabled: bool = True
     audit_log: Path = TUTOR_DATA_ROOT / "audit-log.jsonl"
 
@@ -246,7 +246,7 @@ def _oauth_authorize_form(request: Request) -> Response:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Authorize LinguaGPT</title>
+  <title>Authorize LinguaMCP</title>
   <style>
     body {{ font-family: system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; }}
     label, input, button {{ display: block; width: 100%; box-sizing: border-box; }}
@@ -256,7 +256,7 @@ def _oauth_authorize_form(request: Request) -> Response:
   </style>
 </head>
 <body>
-  <h1>Authorize LinguaGPT</h1>
+  <h1>Authorize LinguaMCP</h1>
   <p>Approve access for client <code>{html.escape(values["client_id"])}</code>.</p>
   <p>This grants access to the local tutor memory MCP tools exposed by this server.</p>
   <form method="post" action="/oauth/authorize">
@@ -365,7 +365,7 @@ def _oauth_token_response(form: dict[str, Any]) -> Response:
             "access_token": access_token,
             "token_type": "Bearer",
             "expires_in": OAUTH_TOKEN_TTL_SECONDS,
-            "scope": "linguagpt",
+            "scope": "linguamcp",
         }
     )
 
@@ -441,7 +441,7 @@ def parse_server_config(argv: list[str] | None = None) -> ServerConfig:
     )
     parser.add_argument(
         "--auth-token-env",
-        default="LINGUAGPT_AUTH_TOKEN",
+        default="LINGUAMCP_AUTH_TOKEN",
         help="Environment variable containing the HTTP bearer token.",
     )
     parser.add_argument(
@@ -451,7 +451,7 @@ def parse_server_config(argv: list[str] | None = None) -> ServerConfig:
     )
     parser.add_argument(
         "--oauth-password-env",
-        default="LINGUAGPT_OAUTH_PASSWORD",
+        default="LINGUAMCP_OAUTH_PASSWORD",
         help="Environment variable containing the OAuth approval password.",
     )
     parser.add_argument(

@@ -287,7 +287,7 @@ class StorageVerificationTests(unittest.TestCase):
         config = parse_server_config(["--http", "--oauth"])
 
         self.assertTrue(config.oauth_enabled)
-        self.assertEqual(config.oauth_password_env, "LINGUAGPT_OAUTH_PASSWORD")
+        self.assertEqual(config.oauth_password_env, "LINGUAMCP_OAUTH_PASSWORD")
 
     def test_server_config_rejects_invalid_http_options(self) -> None:
         with redirect_stderr(StringIO()):

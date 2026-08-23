@@ -4,7 +4,7 @@ cd /d "%~dp0"
 for %%I in ("%~dp0.") do set "PROJECT_ROOT=%%~fI"
 
 echo.
-echo LinguaGPT MCP Launcher Setup
+echo LinguaMCP MCP Launcher Setup
 echo ============================
 echo.
 
@@ -37,7 +37,7 @@ if not exist ".venv\Scripts\python.exe" (
     if errorlevel 1 goto :failed
 )
 
-echo Installing LinguaGPT dependencies...
+echo Installing LinguaMCP dependencies...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto :failed
 
@@ -48,7 +48,7 @@ if errorlevel 1 (
 )
 
 echo Building the desktop launcher...
-dotnet publish "launcher\LinguaGPT.Launcher.csproj" -c Release -o "launcher\publish" --nologo
+dotnet publish "launcher\LinguaMCP.Launcher.csproj" -c Release -o "launcher\publish" --nologo
 if errorlevel 1 goto :failed
 
 echo Creating the desktop shortcut...
@@ -57,7 +57,7 @@ if errorlevel 1 goto :failed
 
 echo.
 echo Setup complete.
-echo Use the "LinguaGPT MCP" shortcut on your desktop to start and stop the server.
+echo Use the "LinguaMCP MCP" shortcut on your desktop to start and stop the server.
 echo.
 pause
 exit /b 0

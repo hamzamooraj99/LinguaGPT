@@ -5,7 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 
-namespace LinguaGPT.Launcher;
+namespace LinguaMCP.Launcher;
 
 public partial class MainWindow : Window
 {
@@ -103,9 +103,9 @@ public partial class MainWindow : Window
             MessageBox.Show("Run setup_launcher.cmd once before starting the server.", "Setup required", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LINGUAGPT_OAUTH_PASSWORD")))
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LINGUAMCP_OAUTH_PASSWORD")))
         {
-            MessageBox.Show("Set LINGUAGPT_OAUTH_PASSWORD as a Windows user environment variable, then reopen the launcher.", "OAuth password missing", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("Set LINGUAMCP_OAUTH_PASSWORD as a Windows user environment variable, then reopen the launcher.", "OAuth password missing", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -114,7 +114,7 @@ public partial class MainWindow : Window
         {
             _logWriter = new StreamWriter(new FileStream(_logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
             _logWriter.WriteLine();
-            _logWriter.WriteLine("--- Starting LinguaGPT MCP ---");
+            _logWriter.WriteLine("--- Starting LinguaMCP MCP ---");
         }
 
         _server = new Process
@@ -152,7 +152,7 @@ public partial class MainWindow : Window
         }
         catch { }
         _server = null;
-        AppendLog("--- LinguaGPT MCP stopped ---");
+        AppendLog("--- LinguaMCP MCP stopped ---");
         CloseLog();
         File.Delete(_statePath);
         RefreshState();

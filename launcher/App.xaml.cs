@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace LinguaGPT.Launcher;
+namespace LinguaMCP.Launcher;
 
 public partial class App : Application
 {

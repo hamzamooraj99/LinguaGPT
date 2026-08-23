@@ -27,7 +27,7 @@ Reports are especially useful when they concern:
 - authentication or OAuth bypasses
 - exposure of learner content, tokens, passwords, or audit data
 - unsafe default network access
-- dependency vulnerabilities that are exploitable in LinguaGPT
+- dependency vulnerabilities that are exploitable in LinguaMCP
 
-LinguaGPT is local-first software. Users remain responsible for securing their
+LinguaMCP is local-first software. Users remain responsible for securing their
 host, MCP client, public tunnel, credentials, and backups.

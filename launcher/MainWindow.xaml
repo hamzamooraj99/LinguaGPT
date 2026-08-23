@@ -1,7 +1,7 @@
-<Window x:Class="LinguaGPT.Launcher.MainWindow"
+<Window x:Class="LinguaMCP.Launcher.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LinguaGPT MCP"
+        Title="LinguaMCP MCP"
         Width="520"
         Height="610"
         MinWidth="520"
@@ -25,7 +25,7 @@
                 </Grid.ColumnDefinitions>
                 <Image Source="Assets/logo_lrg.png" Width="104" Height="104" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="22,0,0,0">
-                    <TextBlock Text="LinguaGPT MCP" FontSize="25" FontWeight="SemiBold" Foreground="White" />
+                    <TextBlock Text="LinguaMCP MCP" FontSize="25" FontWeight="SemiBold" Foreground="White" />
                     <TextBlock Text="Local tutor memory server" FontSize="14" Foreground="#FFF1E9" Margin="0,5,0,0" />
                 </StackPanel>
             </Grid>

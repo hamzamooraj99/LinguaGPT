@@ -1,6 +1,6 @@
-# Contributing to LinguaGPT
+# Contributing to LinguaMCP
 
-Thank you for contributing. LinguaGPT is intentionally small: it is a
+Thank you for contributing. LinguaMCP is intentionally small: it is a
 filesystem-backed MCP memory layer, while teaching behavior belongs to the
 connected language model.
 
@@ -15,7 +15,7 @@ artifacts, or local environment files in an issue or pull request.
 
 ## Development setup
 
-LinguaGPT requires Python 3.10 or newer.
+LinguaMCP requires Python 3.10 or newer.
 
 ```powershell
 python -m venv .venv
@@ -48,7 +48,7 @@ creation, path-traversal rejection, and UTF-8 preservation. Launcher changes
 should also be built with:
 
 ```powershell
-dotnet build launcher/LinguaGPT.Launcher.csproj
+dotnet build launcher/LinguaMCP.Launcher.csproj
 ```
 
 ## Pull requests
