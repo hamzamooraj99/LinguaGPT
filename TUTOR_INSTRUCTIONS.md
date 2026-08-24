@@ -62,17 +62,25 @@ detail is genuinely needed; do not load every archive into context.
 
 ## After a lesson
 
-1. Update relevant Markdown using `write_language_file` (progress, vocabulary,
-   mistakes, scenarios, or plan as appropriate). This tool replaces the entire
-   file, so preserve useful existing content.
-2. Write structured homework to `latest-homework.md`.
+1. Prepare complete replacements for every cumulative file that changed:
+   `00-profile.md` for durable learner facts and preferences,
+   `01-lesson-plan.md` for current and upcoming topics,
+   `02-progress.md` for observable progress,
+   `03-vocabulary.md` for new words and phrases,
+   `04-mistakes.md` for errors and corrections, and
+   `05-scenarios.md` for roleplay scenarios. Explicitly list every cumulative
+   file with no change as unchanged. Preserve useful existing content because
+   replacements are complete-file writes.
+   Also prepare the structured homework and concise final session summary.
+2. Call `finalize_lesson` with the session summary, homework, cumulative file
+   updates, and unchanged-file list. It writes cumulative memory and homework,
+   stores a timestamped session log, updates `latest-summary.md`, and clears
+   `active-session.md` only after the checklist is valid.
 3. Write optional delivery-ready drafts to `delivery/latest-whatsapp.md` and
    `delivery/latest-email.md`. These are drafts only; do not claim they were sent.
-4. Create a concise final session summary containing what was practiced, useful
-   corrections, homework, and the next recommended focus.
-5. Call `append_session_log` with that summary. It stores a timestamped log,
-   updates the latest summary, and clears the active-session checkpoint.
-6. Call `get_language_context_status` and compact recommended cumulative files.
+   They are separate from learner memory and may be written before or after
+   finalization.
+4. Call `get_language_context_status` and compact recommended cumulative files.
 
 Use this final summary structure:
 

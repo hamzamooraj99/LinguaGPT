@@ -38,7 +38,7 @@ LinguaMCP is the memory layer that fixes that — a small, filesystem-backed MCP
 | a set of narrow, validated tools the model calls to read and write context | a "god tool" that does everything through one endpoint |
 | deliberately model-led — Python never grades or generates lessons | a tutor, curriculum engine, or proficiency judge |
 
-**Concretely, installing it gives you:** an MCP server exposing ten validated tools, one Markdown workspace per language under `tutor_data/`, an optional Windows desktop launcher, and an audit trail — with teaching, grading, and curriculum strategy left entirely to the connected model and the user.
+**Concretely, installing it gives you:** an MCP server exposing eleven validated tools, one Markdown workspace per language under `tutor_data/`, an optional Windows desktop launcher, and an audit trail — with teaching, grading, and curriculum strategy left entirely to the connected model and the user.
 
 ---
 
@@ -267,9 +267,10 @@ The OAuth flow is intentionally single-user and local-first. It does not depend 
 | Tool | Purpose |
 | --- | --- |
 | `initialize_language_profile` | Create a complete language profile from templates and supplied learner details. |
-| `read_language_context` | Return bounded active teaching context without loading permanent logs or archives. |
+| `read_language_context` | Return the memory protocol and bounded active teaching context without loading permanent logs or archives. |
 | `write_language_file` | Replace one whitelisted Markdown file, including homework and delivery drafts. |
 | `append_session_log` | Create a timestamped session log, update `latest-summary.md`, and reset `active-session.md`. |
+| `finalize_lesson` | Enforce the update-or-unchanged checklist, write cumulative learner memory and homework, then save the session summary. |
 | `save_session_checkpoint` | Replace the concise active-session state during a long lesson. |
 | `get_language_context_status` | Report character counts and recommend compaction when files grow large. |
 | `compact_language_file` | Archive a complete cumulative file and replace it with a concise model-supplied version. |

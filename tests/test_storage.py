@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -12,6 +13,9 @@ from pathlib import Path
 
 from server import (
     ALLOWED_FILES,
+    MCP_SERVER_INSTRUCTIONS,
+    MEMORY_PROTOCOL,
+    mcp,
     ServerConfig,
     OAUTH_AUTH_CODES,
     OAUTH_ACCESS_TOKENS,
@@ -20,6 +24,7 @@ from server import (
     compact_file,
     configure_runtime_security,
     context_status,
+    finalize_lesson_storage,
     initialize_profile,
     list_archives,
     parse_server_config,
@@ -89,8 +94,50 @@ class StorageVerificationTests(unittest.TestCase):
 
         self.assertEqual(context["language"], "german")
         self.assertIn("Grüße", context["00-profile.md"])
-        self.assertEqual(len(context), 10)
+        self.assertEqual(context["memory_protocol"], MEMORY_PROTOCOL)
+        self.assertIn("03-vocabulary.md", context["memory_protocol"])
+        self.assertIn("04-mistakes.md", context["memory_protocol"])
+        self.assertEqual(len(context), 11)
         self.assertNotIn("delivery/latest-email.md", context)
+
+    def test_server_instructions_are_compact_and_cross_client(self) -> None:
+        self.assertLessEqual(len(MCP_SERVER_INSTRUCTIONS), 512)
+        self.assertIn("read_language_context", MCP_SERVER_INSTRUCTIONS)
+        self.assertIn("03 vocabulary", MCP_SERVER_INSTRUCTIONS)
+        self.assertIn("04 mistakes", MCP_SERVER_INSTRUCTIONS)
+
+    def test_tool_descriptions_explain_memory_workflow(self) -> None:
+        tools = asyncio.run(mcp.get_tools())
+        self.assertEqual(len(tools), 11)
+        descriptions = {
+            name: tools[name].description or ""
+            for name in (
+                "read_language_context",
+                "write_language_file",
+                "append_session_log",
+                "save_session_checkpoint",
+                "finalize_lesson",
+            )
+        }
+        self.assertIn("Mandatory first read", descriptions["read_language_context"])
+        self.assertIn("03 new vocabulary", descriptions["write_language_file"])
+        self.assertIn("04 errors", descriptions["write_language_file"])
+        self.assertIn("does not update profile", descriptions["append_session_log"])
+        self.assertIn("not a final", descriptions["save_session_checkpoint"])
+        self.assertIn(
+            "enforce the cumulative-memory checklist",
+            descriptions["finalize_lesson"],
+        )
+        self.assertEqual(
+            set(tools["finalize_lesson"].parameters["required"]),
+            {
+                "language",
+                "session_markdown",
+                "homework_markdown",
+                "updates",
+                "unchanged_files",
+            },
+        )
 
     def test_write_allowed_file(self) -> None:
         self.initialize()
@@ -148,6 +195,81 @@ class StorageVerificationTests(unittest.TestCase):
             (self.data_root / "german" / "active-session.md").read_text("utf-8"),
         )
         self.assertEqual(available_languages(data_root=self.data_root), ["german"])
+
+    def test_finalize_lesson_updates_cumulative_files_before_session(self) -> None:
+        self.initialize()
+        session_summary = (
+            "# Language Session Summary\n\n"
+            "## Practiced\n\nPhase 0 German placement conversation."
+        )
+        homework = "# Language Homework\n\nReview greetings and corrections."
+        fixed_time = datetime(2026, 6, 21, 14, 0, 0, 0, tzinfo=timezone.utc)
+
+        result = finalize_lesson_storage(
+            "german",
+            session_summary,
+            homework,
+            {
+                "00-profile.md": "# Profil\n\nAvoid English grammar terminology.",
+                "01-lesson-plan.md": "# Plan\n\nContinue with Phase 1.",
+                "02-progress.md": "# Progress\n\nPlacement observations recorded.",
+                "03-vocabulary.md": "# Vocabulary\n\n- die Begrüßung — greeting",
+                "04-mistakes.md": "# Mistakes\n\n- Corrected word order in introductions.",
+            },
+            ["05-scenarios.md"],
+            data_root=self.data_root,
+            template_root=self.template_root,
+            now=fixed_time,
+        )
+
+        language_dir = self.data_root / "german"
+        self.assertTrue(result["finalized"])
+        self.assertEqual(
+            result["updated_files"],
+            [
+                "00-profile.md",
+                "01-lesson-plan.md",
+                "02-progress.md",
+                "03-vocabulary.md",
+                "04-mistakes.md",
+                "latest-homework.md",
+            ],
+        )
+        self.assertEqual(result["unchanged_files"], ["05-scenarios.md"])
+        self.assertIn(
+            "die Begrüßung",
+            (language_dir / "03-vocabulary.md").read_text("utf-8"),
+        )
+        self.assertIn(
+            "word order",
+            (language_dir / "04-mistakes.md").read_text("utf-8"),
+        )
+        self.assertEqual(
+            (language_dir / "latest-homework.md").read_text("utf-8"),
+            homework,
+        )
+        self.assertEqual(
+            (language_dir / "latest-summary.md").read_text("utf-8"),
+            session_summary,
+        )
+        self.assertIn(
+            "No active session checkpoint",
+            (language_dir / "active-session.md").read_text("utf-8"),
+        )
+
+    def test_finalize_lesson_requires_a_decision_for_every_cumulative_file(self) -> None:
+        self.initialize()
+
+        with self.assertRaisesRegex(ValueError, "Missing"):
+            finalize_lesson_storage(
+                "german",
+                "# Summary",
+                "# Homework",
+                {"03-vocabulary.md": "# Vocabulary\n\n- Hallo"},
+                ["00-profile.md", "01-lesson-plan.md", "05-scenarios.md"],
+                data_root=self.data_root,
+                template_root=self.template_root,
+            )
 
     def test_checkpoint_is_bounded_and_delivery_drafts_are_writable(self) -> None:
         self.initialize()

@@ -28,8 +28,11 @@ except ModuleNotFoundError:
     class FastMCP:  # type: ignore[no-redef]
         """Small import-time shim so storage verification can run before setup."""
 
-        def __init__(self, name: str) -> None:
+        def __init__(
+            self, name: str, instructions: str | None = None, **_: Any
+        ) -> None:
             self.name = name
+            self.instructions = instructions
 
         def tool(self, function: Any) -> Any:
             return function
@@ -83,6 +86,27 @@ COMPACTABLE_FILES = (
 CONTEXT_COMPACTION_THRESHOLD_CHARS = 12_000
 TOTAL_CONTEXT_COMPACTION_THRESHOLD_CHARS = 36_000
 
+MCP_SERVER_INSTRUCTIONS = (
+    "Before teaching, call read_language_context and "
+    "get_language_context_status. Treat returned learner files as "
+    "authoritative. During long lessons, checkpoint after major topics or "
+    "roleplays and about every 20-30 turns. Before ending, update applicable "
+    "00 profile, 01 plan, 02 progress, 03 vocabulary, 04 mistakes, and 05 "
+    "scenarios. Save homework before the session summary. Never claim memory "
+    "or a saved change without a successful write."
+)
+
+MEMORY_PROTOCOL = """# LinguaMCP Memory Protocol
+
+Use this context as the current source of truth for teaching and learner memory.
+
+- Start or resume: read this context and check status before new material.
+- During: save a checkpoint after a major topic or roleplay and about every 20-30 turns.
+- End: promote lesson evidence into cumulative files. New words go to 03-vocabulary.md; errors and corrections to 04-mistakes.md; observable progress to 02-progress.md; durable preferences, goals, and constraints to 00-profile.md; next topics to 01-lesson-plan.md; scenarios to 05-scenarios.md.
+- For each category, update it or explicitly decide that it is unchanged or has no new entries. Save homework and the session summary after cumulative updates.
+- A conversational promise is not stored memory until a write succeeds.
+"""
+
 TEMPLATE_FILES = {
     "00-profile.md": "00-profile.md",
     "01-lesson-plan.md": "01-lesson-plan.md",
@@ -102,7 +126,10 @@ TIMESTAMPED_MARKDOWN_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{6}Z\.md$"
 )
 
-mcp = FastMCP("Local Language Tutor Memory")
+mcp = FastMCP(
+    "Local Language Tutor Memory",
+    instructions=MCP_SERVER_INSTRUCTIONS,
+)
 
 
 @dataclass(frozen=True)
@@ -735,7 +762,10 @@ def read_context(
     """Read the complete current Markdown context for a language."""
     normalized, language_dir = _require_language_profile(language, data_root)
 
-    context: dict[str, str] = {"language": normalized}
+    context: dict[str, str] = {
+        "language": normalized,
+        "memory_protocol": MEMORY_PROTOCOL,
+    }
     for filename in CONTEXT_FILES:
         path = _safe_child(language_dir, filename)
         if not path.is_file():
@@ -800,6 +830,113 @@ def append_session(
         "session_file": f"sessions/{filename}",
         "latest_summary_updated": True,
         "active_session_cleared": True,
+    }
+
+
+def finalize_lesson_storage(
+    language: str,
+    session_markdown: str,
+    homework_markdown: str,
+    updates: dict[str, str],
+    unchanged_files: list[str],
+    *,
+    data_root: Path = TUTOR_DATA_ROOT,
+    template_root: Path = TEMPLATE_ROOT,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Persist cumulative lesson outcomes before appending the session."""
+    normalized, _ = _require_language_profile(language, data_root)
+    session_markdown = _require_markdown(session_markdown, "session_markdown")
+    homework_markdown = _require_markdown(homework_markdown, "homework_markdown")
+
+    if not isinstance(updates, dict):
+        raise ValueError("updates must be an object mapping filenames to Markdown.")
+    if any(not isinstance(filename, str) for filename in updates):
+        raise ValueError("Every updates key must be a string filename.")
+    if not isinstance(unchanged_files, list):
+        raise ValueError("unchanged_files must be a list of filenames.")
+    if any(not isinstance(filename, str) for filename in unchanged_files):
+        raise ValueError("Every unchanged_files entry must be a string filename.")
+    if len(unchanged_files) != len(set(unchanged_files)):
+        raise ValueError("unchanged_files must not contain duplicates.")
+
+    cumulative_files = set(COMPACTABLE_FILES)
+    update_files = set(updates)
+    unchanged_set = set(unchanged_files)
+    invalid_updates = sorted(update_files - cumulative_files)
+    invalid_unchanged = sorted(unchanged_set - cumulative_files)
+    overlapping = sorted(update_files & unchanged_set)
+    accounted_for = update_files | unchanged_set
+    missing = [
+        filename
+        for filename in COMPACTABLE_FILES
+        if filename not in accounted_for
+    ]
+
+    if invalid_updates:
+        raise ValueError(
+            "updates may contain only cumulative files: "
+            + ", ".join(COMPACTABLE_FILES)
+            + ". Invalid: "
+            + ", ".join(invalid_updates)
+        )
+    if invalid_unchanged:
+        raise ValueError(
+            "unchanged_files may contain only cumulative files. Invalid: "
+            + ", ".join(invalid_unchanged)
+        )
+    if overlapping:
+        raise ValueError(
+            "A cumulative file cannot be both updated and unchanged: "
+            + ", ".join(overlapping)
+        )
+    if missing:
+        raise ValueError(
+            "Account for every cumulative file in updates or unchanged_files. "
+            "Missing: "
+            + ", ".join(missing)
+        )
+
+    for filename, content in updates.items():
+        _require_markdown(content, f"updates[{filename}]")
+
+    updated_files: list[str] = []
+    for filename in COMPACTABLE_FILES:
+        if filename in updates:
+            write_file(
+                normalized,
+                filename,
+                updates[filename],
+                data_root=data_root,
+            )
+            updated_files.append(filename)
+
+    write_file(
+        normalized,
+        "latest-homework.md",
+        homework_markdown,
+        data_root=data_root,
+    )
+    updated_files.append("latest-homework.md")
+
+    session_result = append_session(
+        normalized,
+        session_markdown,
+        data_root=data_root,
+        template_root=template_root,
+        now=now,
+    )
+
+    return {
+        "language": normalized,
+        "finalized": True,
+        "updated_files": updated_files,
+        "unchanged_files": [
+            filename for filename in COMPACTABLE_FILES if filename in unchanged_set
+        ],
+        "session_file": session_result["session_file"],
+        "latest_summary_updated": session_result["latest_summary_updated"],
+        "active_session_cleared": session_result["active_session_cleared"],
     }
 
 
@@ -1000,10 +1137,13 @@ def initialize_language_profile(
     lesson_plan_markdown: str,
     overwrite_existing: bool = False,
 ) -> dict[str, Any]:
-    """Initialize local Markdown memory for a language.
+    """Create a new language workspace and seed its Markdown memory.
 
-    Existing profile and lesson-plan files are preserved unless
-    overwrite_existing is explicitly true. Other existing files are never reset.
+    Use this once for a new language, not as an ordinary lesson-end tool. It
+    creates all standard files from templates, using the supplied content for
+    00-profile.md and 01-lesson-plan.md. Existing profile and plan files are
+    preserved unless overwrite_existing is explicitly true; other files are
+    never reset.
     """
     return _run_tool(
         "initialize_language_profile",
@@ -1017,7 +1157,12 @@ def initialize_language_profile(
 
 @mcp.tool
 def read_language_context(language: str) -> dict[str, str]:
-    """Read the bounded active tutor context, excluding archives and drafts."""
+    """Mandatory first read before teaching or resuming a lesson.
+
+    Returns the memory protocol plus the current profile, plan, progress,
+    vocabulary, mistakes, scenarios, latest summary, active checkpoint, and
+    homework. It excludes permanent session logs, archives, and delivery drafts.
+    """
     return _run_tool(
         "read_language_context",
         lambda: read_context(language),
@@ -1029,7 +1174,13 @@ def read_language_context(language: str) -> dict[str, str]:
 def write_language_file(
     language: str, filename: str, content: str
 ) -> dict[str, Any]:
-    """Replace one allowed Markdown file in an existing language profile."""
+    """Persist one complete replacement for an allowed learner-memory file.
+
+    Use after collecting lesson evidence: 00 stores durable profile/preferences;
+    01 the plan; 02 observable progress; 03 new vocabulary; 04 errors and
+    corrections; 05 scenarios; latest-homework.md homework. This replaces the
+    whole file, so read current context first and preserve useful content.
+    """
     return _run_tool(
         "write_language_file",
         lambda: write_file(language, filename, content),
@@ -1041,7 +1192,13 @@ def write_language_file(
 
 @mcp.tool
 def append_session_log(language: str, session_markdown: str) -> dict[str, Any]:
-    """Save a final session, update latest summary, and clear the checkpoint."""
+    """Store the final session summary after learner-memory updates are complete.
+
+    Creates a permanent timestamped session log, replaces latest-summary.md,
+    and clears active-session.md. It does not update profile, plan, progress,
+    vocabulary, mistakes, scenarios, or homework; use write_language_file (or
+    finalize_lesson) for those first.
+    """
     return _run_tool(
         "append_session_log",
         lambda: append_session(language, session_markdown),
@@ -1051,10 +1208,47 @@ def append_session_log(language: str, session_markdown: str) -> dict[str, Any]:
 
 
 @mcp.tool
+def finalize_lesson(
+    language: str,
+    session_markdown: str,
+    homework_markdown: str,
+    updates: dict[str, str],
+    unchanged_files: list[str],
+) -> dict[str, Any]:
+    """Finalize a lesson and enforce the cumulative-memory checklist.
+
+    Supply complete replacement Markdown in updates for every cumulative file
+    that changed, and list every other cumulative file in unchanged_files. The
+    two collections must account for all of 00-profile.md through
+    05-scenarios.md. If new words or errors occurred, update 03 and 04 rather
+    than marking them unchanged. This tool writes cumulative files and
+    homework before creating the session log, latest summary, and clearing the
+    active checkpoint. Prefer it over separate end-of-lesson writes.
+    """
+    return _run_tool(
+        "finalize_lesson",
+        lambda: finalize_lesson_storage(
+            language,
+            session_markdown,
+            homework_markdown,
+            updates,
+            unchanged_files,
+        ),
+        writes=True,
+        language=language,
+    )
+
+
+@mcp.tool
 def save_session_checkpoint(
     language: str, checkpoint_markdown: str
 ) -> dict[str, Any]:
-    """Overwrite the concise active-session checkpoint during a long lesson."""
+    """Save a concise checkpoint during a long or interruptible lesson.
+
+    Use after a major topic or roleplay, before changing subjects, or about
+    every 20-30 turns. This replaces the previous checkpoint and is not a final
+    lesson summary or a substitute for cumulative-file updates.
+    """
     return _run_tool(
         "save_session_checkpoint",
         lambda: save_checkpoint(language, checkpoint_markdown),
@@ -1065,7 +1259,11 @@ def save_session_checkpoint(
 
 @mcp.tool
 def get_language_context_status(language: str) -> dict[str, Any]:
-    """Report context sizes and cumulative files recommended for compaction."""
+    """Check context sizes before teaching and after lesson-end writes.
+
+    Reports file sizes and compaction recommendations only; it does not judge
+    lesson completeness or update any learner file.
+    """
     return _run_tool(
         "get_language_context_status",
         lambda: context_status(language),
@@ -1077,7 +1275,12 @@ def get_language_context_status(language: str) -> dict[str, Any]:
 def compact_language_file(
     language: str, filename: str, compacted_markdown: str
 ) -> dict[str, Any]:
-    """Archive one cumulative context file and replace it with a concise version."""
+    """Compact one cumulative file only when status recommends it.
+
+    Read the complete current file first, preserve active goals and useful
+    evidence in the replacement, and remember that the previous version is
+    archived automatically.
+    """
     return _run_tool(
         "compact_language_file",
         lambda: compact_file(language, filename, compacted_markdown),
@@ -1089,7 +1292,11 @@ def compact_language_file(
 
 @mcp.tool
 def list_language_file_archives(language: str, filename: str) -> list[str]:
-    """List available archive timestamps for one cumulative context file."""
+    """List archived versions of one cumulative learner-memory file.
+
+    Use only when older detail is genuinely needed; normal teaching uses the
+    current bounded context.
+    """
     return _run_tool(
         "list_language_file_archives",
         lambda: list_archives(language, filename),
@@ -1102,7 +1309,10 @@ def list_language_file_archives(language: str, filename: str) -> list[str]:
 def read_language_file_archive(
     language: str, filename: str, archive_filename: str
 ) -> dict[str, str]:
-    """Read one archive selected from list_language_file_archives."""
+    """Read one validated archive selected from list_language_file_archives.
+
+    Use for recovering older detail, not as a replacement for current context.
+    """
     return _run_tool(
         "read_language_file_archive",
         lambda: read_archive(language, filename, archive_filename),
@@ -1113,7 +1323,10 @@ def read_language_file_archive(
 
 @mcp.tool
 def list_languages() -> list[str]:
-    """List initialized language profiles."""
+    """List available initialized language workspaces.
+
+    Use when selecting a language before calling its context or write tools.
+    """
     return _run_tool("list_languages", available_languages)
 
 
