@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A read-only view of LinguaMCP learner memory.">
+    <title>LinguaMCP · Learner Memory</title>
+    <link rel="icon" type="image/png" href="assets/logo_lrg.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div id="app" class="app-shell is-picker">
+      <header class="mobile-header">
+        <div class="mobile-leading">
+          <button class="mobile-menu-button" type="button" data-action="toggle-files" aria-label="Open files" aria-expanded="false">
+            <span class="hamburger-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+          </button>
+          <button class="mobile-brand" type="button" data-action="back-to-languages" aria-label="Back to languages">
+            <img src="assets/logo_lrg.png" alt="">
+            <span>LinguaMCP</span>
+          </button>
+        </div>
+        <div class="mobile-actions">
+          <button class="theme-toggle" type="button" data-theme-toggle data-theme="light" role="switch" aria-checked="false" aria-label="Switch to dark mode" title="Toggle light/dark mode">
+            <span class="theme-toggle-thumb" aria-hidden="true"></span>
+          </button>
+        </div>
+      </header>
+
+      <div class="app-layout">
+        <aside id="sidebar" class="sidebar" aria-label="Learner memory navigation" aria-hidden="true">
+          <div class="sidebar-brand">
+            <button class="brand-link" type="button" data-action="back-to-languages" aria-label="Back to languages">
+              <img src="assets/logo_lrg.png" alt="">
+              <span>LinguaMCP</span>
+            </button>
+            <p class="brand-kicker">Learner memory</p>
+          </div>
+
+          <div class="sidebar-controls">
+            <button class="sidebar-back" type="button" data-action="back-to-languages">
+              <span aria-hidden="true">←</span>
+              <span>All languages</span>
+            </button>
+            <button class="theme-toggle" type="button" data-theme-toggle data-theme="light" role="switch" aria-checked="false" aria-label="Switch to dark mode" title="Toggle light/dark mode">
+              <span class="theme-toggle-thumb" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div class="sidebar-language" id="sidebar-language"></div>
+          <nav id="file-nav" class="file-nav" aria-label="Markdown files"></nav>
+
+          <div class="sidebar-footer">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>Read-only preview</span>
+          </div>
+        </aside>
+
+        <button id="drawer-backdrop" class="drawer-backdrop" type="button" aria-label="Close files" hidden></button>
+
+        <main id="main-content" class="main-content">
+          <section id="picker-view" class="picker-view" aria-labelledby="picker-title">
+            <div class="picker-toolbar">
+              <p>Private read-only preview</p>
+              <button class="theme-toggle" type="button" data-theme-toggle data-theme="light" role="switch" aria-checked="false" aria-label="Switch to dark mode" title="Toggle light/dark mode">
+                <span class="theme-toggle-thumb" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div class="picker-intro">
+              <div class="picker-title-row">
+                <img class="picker-mark" src="assets/logo_lrg.png" alt="">
+                <h1 id="picker-title">Choose a language</h1>
+              </div>
+              <p class="intro-copy">A quiet, read-only window into the Markdown that keeps your lessons connected.</p>
+            </div>
+            <div id="language-list" class="language-list" aria-live="polite"></div>
+            <p class="picker-note">Choose a language to open its memory.</p>
+          </section>
+
+          <section id="reader-view" class="reader-view" aria-labelledby="reader-title" hidden>
+            <div class="reader-header">
+              <div class="reader-heading">
+                <p id="reader-kicker" class="eyebrow">German · Current memory</p>
+                <h1 id="reader-title">Profile</h1>
+                <p id="reader-path" class="reader-path">00-profile.md</p>
+              </div>
+              <p id="reader-status" class="reader-status">Read-only</p>
+            </div>
+
+            <div id="reader-loading" class="reader-state" hidden>
+              <span class="loading-bar" aria-hidden="true"></span>
+              <span>Opening document…</span>
+            </div>
+            <div id="reader-error" class="reader-state reader-error" role="alert" hidden></div>
+            <article id="document-content" class="markdown-body" aria-live="polite"></article>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
