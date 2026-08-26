@@ -16,6 +16,50 @@ from viewer.storage import (
 )
 
 
+class DeploymentArtifactTests(unittest.TestCase):
+    """Repository checks for the Phase 3 activation artifacts."""
+
+    repository_root = Path(__file__).resolve().parents[1]
+
+    def test_phase3_unit_is_read_only_and_loopback_bound(self) -> None:
+        unit = (self.repository_root / "deploy" / "systemd" / "linguamcp-viewer.service").read_text(encoding="utf-8")
+        for required in (
+            "User=linguamcp-viewer",
+            "Group=linguamcp-viewer",
+            "WorkingDirectory=/opt/services/linguamcp",
+            "--host 127.0.0.1 --port 8001",
+            "--data-root /var/lib/linguamcp",
+            "Restart=on-failure",
+            "UMask=0027",
+            "NoNewPrivileges=true",
+            "PrivateTmp=true",
+            "ProtectSystem=strict",
+            "ProtectHome=true",
+            "ReadOnlyPaths=/var/lib/linguamcp",
+            "StandardOutput=journal",
+            "StandardError=journal",
+        ):
+            self.assertIn(required, unit)
+        self.assertNotIn("ReadWritePaths=", unit)
+
+    def test_phase3_guide_keeps_access_private_and_fastmcp_separate(self) -> None:
+        guide = (self.repository_root / "deploy" / "PHASE3_DEBIAN.md").read_text(encoding="utf-8")
+        for required in (
+            "linguamcp.service",
+            "127.0.0.1:8000",
+            "127.0.0.1:8001",
+            "setfacl",
+            "tailscale serve --bg --https=8443 8001",
+            "tailscale funnel status",
+            "systemd-analyze verify",
+            "expected failure: create",
+            "expected failure: modify",
+            "expected failure: rename",
+            "expected failure: delete",
+        ):
+            self.assertIn(required, guide)
+
+
 class ViewerAPITests(unittest.TestCase):
     """Phase 2 checks for the live read-only viewer application."""
 

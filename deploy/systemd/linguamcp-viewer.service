@@ -1,0 +1,57 @@
+# LinguaMCP read-only Markdown viewer.
+#
+# This file is the repository source of truth. Install this exact file as
+# /etc/systemd/system/linguamcp-viewer.service on Debian; do not edit the
+# installed copy by hand.
+
+[Unit]
+Description=LinguaMCP read-only learner memory viewer
+Documentation=file:///opt/services/linguamcp/deploy/PHASE3_DEBIAN.md
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/opt/services/linguamcp /var/lib/linguamcp
+ConditionPathExists=/opt/services/linguamcp/.venv/bin/python
+ConditionPathIsDirectory=/var/lib/linguamcp
+
+[Service]
+Type=simple
+User=linguamcp-viewer
+Group=linguamcp-viewer
+WorkingDirectory=/opt/services/linguamcp
+ExecStart=/opt/services/linguamcp/.venv/bin/python -m viewer --host 127.0.0.1 --port 8001 --data-root /var/lib/linguamcp
+Restart=on-failure
+RestartSec=5s
+UMask=0027
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# The process needs to read the repository and learner data, but it has no
+# writable application directory. ProtectSystem=strict makes the host file
+# system read-only to this service; ReadOnlyPaths makes the data boundary
+# explicit as well.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/lib/linguamcp
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# The application writes only to journald, never to learner files.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=linguamcp-viewer
+
+[Install]
+WantedBy=multi-user.target
