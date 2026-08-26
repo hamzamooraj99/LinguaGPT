@@ -110,7 +110,16 @@ read one Markdown file:
 ```bash
 sudo -u linguamcp-viewer -- test -x /opt/services/linguamcp/.venv/bin/python
 sudo -u linguamcp-viewer -- /opt/services/linguamcp/.venv/bin/python -c 'import viewer; print("viewer import: ok")'
-sudo -u linguamcp-viewer -- sh -c 'target=$(find /var/lib/linguamcp -type f -name "*.md" -print -quit); test -n "$target"; test -r "$target"; printf "read: ok (%s)\n" "$target"'
+sudo -u linguamcp-viewer -- sh -c '
+  set -eu
+  target=$(find /var/lib/linguamcp -type f -name "*.md" -print -quit)
+  if [ -z "$target" ]; then
+    echo "SKIP: no Markdown files exist yet"
+    exit 0
+  fi
+  test -r "$target"
+  printf "read: ok (%s)\n" "$target"
+'
 ```
 
 Then prove that create, modify, rename, and delete attempts fail. This probe
@@ -118,11 +127,10 @@ must print four `expected failure` lines and must leave learner data unchanged:
 
 ```bash
 sudo -u linguamcp-viewer -- sh -c '
-  set -u
+  set -eu
   root=/var/lib/linguamcp
   probe="$root/.linguamcp-viewer-write-probe"
   target=$(find "$root" -type f -name "*.md" -print -quit)
-  test -n "$target"
 
   if (umask 077; : >"$probe") 2>/dev/null; then
     echo "UNEXPECTED: create succeeded"
@@ -130,6 +138,11 @@ sudo -u linguamcp-viewer -- sh -c '
     exit 1
   else
     echo "expected failure: create"
+  fi
+
+  if [ -z "$target" ]; then
+    echo "SKIP: no Markdown file exists; defer modify, rename, and delete probes"
+    exit 0
   fi
 
   if printf "%s\n" "permission probe" >>"$target" 2>/dev/null; then

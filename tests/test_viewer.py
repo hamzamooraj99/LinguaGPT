@@ -56,6 +56,8 @@ class DeploymentArtifactTests(unittest.TestCase):
             "expected failure: modify",
             "expected failure: rename",
             "expected failure: delete",
+            "SKIP: no Markdown file exists",
+            "set -eu",
         ):
             self.assertIn(required, guide)
 
