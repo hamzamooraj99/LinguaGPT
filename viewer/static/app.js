@@ -1,5 +1,13 @@
 import { httpDataSource } from "./http-data.js";
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {
+      // The viewer remains usable as a normal website if registration fails.
+    });
+  });
+}
+
 const app = document.querySelector("#app");
 const sidebar = document.querySelector("#sidebar");
 const drawerBackdrop = document.querySelector("#drawer-backdrop");

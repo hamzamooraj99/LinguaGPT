@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -404,6 +406,55 @@ class ViewerAPITests(unittest.TestCase):
         self.assertEqual(data_script.status_code, 200)
         self.assertIn("api/languages", data_script.text)
         self.assertEqual(mock_script.status_code, 404)
+
+    def test_frontend_is_an_installable_network_only_web_app(self) -> None:
+        index = self.request("GET", "/")
+        manifest_response = self.request("GET", "/manifest.webmanifest")
+        service_worker = self.request("GET", "/service-worker.js")
+        app_script = self.request("GET", "/app.js")
+
+        self.assertIn('rel="manifest" href="manifest.webmanifest"', index.text)
+        self.assertIn('rel="apple-touch-icon"', index.text)
+        self.assertIn('name="theme-color"', index.text)
+
+        self.assertEqual(manifest_response.status_code, 200)
+        self.assertEqual(manifest_response.headers.get("cache-control"), "no-cache")
+        manifest = json.loads(manifest_response.text)
+        self.assertEqual(manifest["name"], "LinguaMCP Learner Memory")
+        self.assertEqual(manifest["short_name"], "LinguaMCP")
+        self.assertEqual(manifest["start_url"], "./")
+        self.assertEqual(manifest["scope"], "./")
+        self.assertEqual(manifest["display"], "standalone")
+        self.assertIn(
+            ("192x192", "any"),
+            {(icon["sizes"], icon["purpose"]) for icon in manifest["icons"]},
+        )
+        self.assertIn(
+            ("512x512", "any"),
+            {(icon["sizes"], icon["purpose"]) for icon in manifest["icons"]},
+        )
+        self.assertIn(
+            ("512x512", "maskable"),
+            {(icon["sizes"], icon["purpose"]) for icon in manifest["icons"]},
+        )
+
+        for icon in manifest["icons"]:
+            response = self.request("GET", f"/{icon['src']}")
+            self.assertEqual(response.status_code, 200, icon["src"])
+            self.assertEqual(response.headers.get("content-type"), "image/png")
+            width, height = struct.unpack(">II", response.content[16:24])
+            expected_size = int(icon["sizes"].split("x", 1)[0])
+            self.assertEqual((width, height), (expected_size, expected_size))
+
+        apple_icon = self.request("GET", "/assets/icon-180.png")
+        self.assertEqual(apple_icon.status_code, 200)
+        self.assertEqual(struct.unpack(">II", apple_icon.content[16:24]), (180, 180))
+
+        self.assertEqual(service_worker.status_code, 200)
+        self.assertEqual(service_worker.headers.get("cache-control"), "no-cache")
+        self.assertIn("fetch(event.request)", service_worker.text)
+        self.assertNotIn("caches.open", service_worker.text)
+        self.assertIn('register("./service-worker.js")', app_script.text)
 
 
 if __name__ == "__main__":

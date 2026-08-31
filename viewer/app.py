@@ -40,6 +40,7 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 NO_STORE_HEADERS = {"Cache-Control": "no-store"}
+PWA_METADATA_PATHS = {"manifest.webmanifest", "service-worker.js"}
 
 
 def _error_payload(error: ViewerStorageError) -> dict[str, dict[str, str]]:
@@ -164,7 +165,10 @@ class ProductionStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope: dict[str, Any]) -> Response:
         if path == "mock-data.js":
             return PlainTextResponse("Not Found", status_code=404)
-        return await super().get_response(path, scope)
+        response = await super().get_response(path, scope)
+        if path in PWA_METADATA_PATHS:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def create_app(
