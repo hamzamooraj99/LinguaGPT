@@ -267,8 +267,11 @@ The OAuth flow is intentionally single-user and local-first. It does not depend 
 | Tool | Purpose |
 | --- | --- |
 | `initialize_language_profile` | Create a complete language profile from templates and supplied learner details. |
-| `read_language_context` | Return the memory protocol and bounded active teaching context without loading permanent logs or archives. |
+| `read_language_context` | Return the memory protocol and bounded active teaching context without loading custom notes, permanent logs, or archives. |
 | `write_language_file` | Replace one whitelisted Markdown file, including homework and delivery drafts. |
+| `list_language_notes` | List custom Markdown notes stored for a language. |
+| `read_language_note` | Read one custom Markdown note before using or updating it. |
+| `write_language_note` | Create or replace a custom Markdown note displayed under **Other** in the viewer. |
 | `append_session_log` | Create a timestamped session log, update `latest-summary.md`, and reset `active-session.md`. |
 | `finalize_lesson` | Enforce the update-or-unchanged checklist, write cumulative learner memory and homework, then save the session summary. |
 | `save_session_checkpoint` | Replace the concise active-session state during a long lesson. |
@@ -278,7 +281,7 @@ The OAuth flow is intentionally single-user and local-first. It does not depend 
 | `read_language_file_archive` | Read one validated archive file on demand. |
 | `list_languages` | Return available language directories alphabetically. |
 
-Language identifiers are normalized to lowercase and may contain only letters, digits, and hyphens. Filenames come from a fixed whitelist. **Callers cannot write arbitrary paths.**
+Language identifiers are normalized to lowercase and may contain only letters, digits, and hyphens. Learner-memory filenames come from a fixed whitelist. Custom notes are restricted to simple `.md` filenames directly inside the language's `notes/` directory, so callers cannot write arbitrary paths.
 
 ---
 
@@ -289,6 +292,7 @@ LinguaMCP keeps active context small and recoverable:
 - `active-session.md`, `latest-summary.md`, `latest-homework.md`, and delivery drafts are bounded because they are **replaced**, not appended.
 - `sessions/` stores **permanent** timestamped lesson logs.
 - `archives/` stores **full pre-compaction** versions of cumulative files.
+- `notes/` stores optional custom Markdown references, which the viewer displays under **Other**. Use `list_language_notes` and `read_language_note` before replacing an existing note.
 - Profile, lesson plan, progress, vocabulary, mistakes, and scenarios can grow over time, so the status tool flags large files for model-led compaction.
 
 Compaction is deliberately model-led: Python archives the original and writes the replacement supplied by the AI. It does not decide what learning content matters.

@@ -125,6 +125,9 @@ LANGUAGE_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,49}$")
 TIMESTAMPED_MARKDOWN_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{6}Z\.md$"
 )
+NOTE_FILENAME_PATTERN = re.compile(
+    r"^[a-z0-9][a-z0-9_-]{0,98}\.md$", re.IGNORECASE
+)
 
 mcp = FastMCP(
     "Local Language Tutor Memory",
@@ -692,6 +695,18 @@ def _validate_allowed_filename(filename: str) -> str:
     return filename
 
 
+def _validate_note_filename(filename: str) -> str:
+    if (
+        not isinstance(filename, str)
+        or not NOTE_FILENAME_PATTERN.fullmatch(filename)
+    ):
+        raise ValueError(
+            "Invalid note filename. Use a .md filename containing only letters, "
+            "digits, hyphens, or underscores (maximum 102 characters)."
+        )
+    return filename
+
+
 def _require_language_profile(language: str, data_root: Path) -> tuple[str, Path]:
     normalized, language_dir = _language_directory(language, data_root)
     if not language_dir.is_dir():
@@ -716,7 +731,7 @@ def initialize_profile(
     )
 
     language_dir.mkdir(parents=True, exist_ok=True)
-    for directory in ("sessions", "delivery", "archives"):
+    for directory in ("sessions", "delivery", "archives", "notes"):
         _safe_child(language_dir, directory).mkdir(exist_ok=True)
 
     supplied_content = {
@@ -752,7 +767,7 @@ def initialize_profile(
         "created": created,
         "overwritten": overwritten,
         "preserved": preserved,
-        "directories": ["sessions", "delivery", "archives"],
+        "directories": ["sessions", "delivery", "archives", "notes"],
     }
 
 
@@ -794,6 +809,81 @@ def write_file(
     return {
         "language": normalized,
         "filename": filename,
+        "characters_written": len(content),
+    }
+
+
+def list_notes(
+    language: str, *, data_root: Path = TUTOR_DATA_ROOT
+) -> list[str]:
+    """List custom Markdown note filenames for an existing language."""
+    _, language_dir = _require_language_profile(language, data_root)
+    notes_dir = _safe_child(language_dir, "notes")
+    if not notes_dir.exists():
+        return []
+    if not notes_dir.is_dir():
+        raise ValueError("The language notes path is not a directory.")
+
+    notes: list[str] = []
+    with os.scandir(notes_dir) as entries:
+        for entry in entries:
+            if (
+                NOTE_FILENAME_PATTERN.fullmatch(entry.name)
+                and not entry.is_symlink()
+                and entry.is_file(follow_symlinks=False)
+            ):
+                notes.append(entry.name)
+    return sorted(notes, key=str.casefold)
+
+
+def read_note(
+    language: str,
+    filename: str,
+    *,
+    data_root: Path = TUTOR_DATA_ROOT,
+) -> dict[str, str]:
+    """Read one validated custom Markdown note for an existing language."""
+    normalized, language_dir = _require_language_profile(language, data_root)
+    filename = _validate_note_filename(filename)
+    notes_dir = _safe_child(language_dir, "notes")
+    path = notes_dir / filename
+    if path.is_symlink():
+        raise ValueError(f"Language note does not exist: {filename}")
+    path = _safe_child(notes_dir, filename)
+    if not path.is_file():
+        raise ValueError(f"Language note does not exist: {filename}")
+    return {
+        "language": normalized,
+        "filename": filename,
+        "content": path.read_text(encoding="utf-8"),
+    }
+
+
+def write_note(
+    language: str,
+    filename: str,
+    content: str,
+    *,
+    data_root: Path = TUTOR_DATA_ROOT,
+) -> dict[str, Any]:
+    """Create or replace one validated custom Markdown note."""
+    normalized, language_dir = _require_language_profile(language, data_root)
+    filename = _validate_note_filename(filename)
+    content = _require_markdown(content)
+    notes_dir = _safe_child(language_dir, "notes")
+    notes_dir.mkdir(exist_ok=True)
+    path = notes_dir / filename
+    if path.is_symlink():
+        raise ValueError("Refusing to replace a symbolic link.")
+    path = _safe_child(notes_dir, filename)
+    created = not path.exists()
+    if not created and not path.is_file():
+        raise ValueError("The requested note path is not a regular file.")
+    path.write_text(content, encoding="utf-8")
+    return {
+        "language": normalized,
+        "filename": filename,
+        "created": created,
         "characters_written": len(content),
     }
 
@@ -1161,7 +1251,8 @@ def read_language_context(language: str) -> dict[str, str]:
 
     Returns the memory protocol plus the current profile, plan, progress,
     vocabulary, mistakes, scenarios, latest summary, active checkpoint, and
-    homework. It excludes permanent session logs, archives, and delivery drafts.
+    homework. It excludes custom notes, permanent session logs, archives, and
+    delivery drafts; use list_language_notes and read_language_note for notes.
     """
     return _run_tool(
         "read_language_context",
@@ -1184,6 +1275,54 @@ def write_language_file(
     return _run_tool(
         "write_language_file",
         lambda: write_file(language, filename, content),
+        writes=True,
+        language=language,
+        filename=filename,
+    )
+
+
+@mcp.tool
+def list_language_notes(language: str) -> list[str]:
+    """List the custom Markdown notes stored for a language.
+
+    Notes live in the language's notes directory and appear in the Markdown
+    viewer under Other. Use this before selecting a note to read or update.
+    """
+    return _run_tool(
+        "list_language_notes",
+        lambda: list_notes(language),
+        language=language,
+    )
+
+
+@mcp.tool
+def read_language_note(language: str, filename: str) -> dict[str, str]:
+    """Read one custom Markdown note by its listed filename.
+
+    Read the current note before replacing it so useful material is preserved.
+    Only simple .md filenames inside the language's notes directory are accepted.
+    """
+    return _run_tool(
+        "read_language_note",
+        lambda: read_note(language, filename),
+        language=language,
+        filename=filename,
+    )
+
+
+@mcp.tool
+def write_language_note(
+    language: str, filename: str, content: str
+) -> dict[str, Any]:
+    """Create or completely replace a custom Markdown note.
+
+    Notes appear in the Markdown viewer under Other. Supply a simple .md
+    filename such as gender-noun-conventions.md. When updating an existing
+    note, read it first and include all material that should be retained.
+    """
+    return _run_tool(
+        "write_language_note",
+        lambda: write_note(language, filename, content),
         writes=True,
         language=language,
         filename=filename,

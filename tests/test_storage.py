@@ -27,11 +27,14 @@ from server import (
     finalize_lesson_storage,
     initialize_profile,
     list_archives,
+    list_notes,
     parse_server_config,
     read_context,
     read_archive,
+    read_note,
     save_checkpoint,
     write_file,
+    write_note,
     _oauth_token_response,
     _run_tool,
 )
@@ -69,6 +72,7 @@ class StorageVerificationTests(unittest.TestCase):
         self.assertTrue((language_dir / "sessions").is_dir())
         self.assertTrue((language_dir / "delivery").is_dir())
         self.assertTrue((language_dir / "archives").is_dir())
+        self.assertTrue((language_dir / "notes").is_dir())
         for filename in ALLOWED_FILES:
             self.assertTrue((language_dir / filename).is_file())
 
@@ -108,12 +112,15 @@ class StorageVerificationTests(unittest.TestCase):
 
     def test_tool_descriptions_explain_memory_workflow(self) -> None:
         tools = asyncio.run(mcp.get_tools())
-        self.assertEqual(len(tools), 11)
+        self.assertEqual(len(tools), 14)
         descriptions = {
             name: tools[name].description or ""
             for name in (
                 "read_language_context",
                 "write_language_file",
+                "list_language_notes",
+                "read_language_note",
+                "write_language_note",
                 "append_session_log",
                 "save_session_checkpoint",
                 "finalize_lesson",
@@ -122,6 +129,11 @@ class StorageVerificationTests(unittest.TestCase):
         self.assertIn("Mandatory first read", descriptions["read_language_context"])
         self.assertIn("03 new vocabulary", descriptions["write_language_file"])
         self.assertIn("04 errors", descriptions["write_language_file"])
+        self.assertIn("viewer under Other", descriptions["list_language_notes"])
+        self.assertIn("Read the current note", descriptions["read_language_note"])
+        self.assertIn(
+            "gender-noun-conventions.md", descriptions["write_language_note"]
+        )
         self.assertIn("does not update profile", descriptions["append_session_log"])
         self.assertIn("not a final", descriptions["save_session_checkpoint"])
         self.assertIn(
@@ -151,6 +163,49 @@ class StorageVerificationTests(unittest.TestCase):
             "Schön",
             read_context("german", data_root=self.data_root)["02-progress.md"],
         )
+
+    def test_custom_notes_can_be_created_listed_read_and_updated(self) -> None:
+        self.initialize()
+        filename = "gender-noun-conventions.md"
+        first = "# German noun gender\n\n## Feminine\n\n- `-ung` is usually feminine."
+        updated = first + "\n\n## Masculine\n\n- Days of the week are masculine."
+
+        created = write_note(
+            "german", filename, first, data_root=self.data_root
+        )
+        self.assertTrue(created["created"])
+        self.assertEqual(
+            list_notes("german", data_root=self.data_root), [filename]
+        )
+        self.assertEqual(
+            read_note("german", filename, data_root=self.data_root)["content"],
+            first,
+        )
+
+        replaced = write_note(
+            "german", filename, updated, data_root=self.data_root
+        )
+        self.assertFalse(replaced["created"])
+        self.assertEqual(
+            read_note("german", filename, data_root=self.data_root)["content"],
+            updated,
+        )
+
+    def test_custom_notes_reject_paths_non_markdown_and_missing_files(self) -> None:
+        self.initialize()
+        for filename in (
+            "../outside.md",
+            "nested/note.md",
+            "C:\\outside.md",
+            ".hidden.md",
+            "note.txt",
+            "two.dots.md",
+        ):
+            with self.subTest(filename=filename), self.assertRaises(ValueError):
+                write_note("german", filename, "bad", data_root=self.data_root)
+
+        with self.assertRaisesRegex(ValueError, "does not exist"):
+            read_note("german", "missing.md", data_root=self.data_root)
 
     def test_invalid_paths_and_filenames_are_rejected(self) -> None:
         self.initialize()
